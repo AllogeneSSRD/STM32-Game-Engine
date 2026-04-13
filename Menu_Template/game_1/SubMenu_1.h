@@ -12,6 +12,7 @@ typedef enum {
     SUBMENU_1_STATE_1,          // Game mode 1
     SUBMENU_1_STATE_2,          // Game mode 2
     SUBMENU_1_STATE_3,          // Game mode 3
+    SUBMENU_1_STATE_RETURN_MAIN // Return to top-level main menu
 } SubMenuState;
 
 // Menu system structure
@@ -33,7 +34,7 @@ void SubMenu_Init(SubMenuSystem* menu);
  * 
  * Runs its own loop and returns the selected game state.
  * 
- * @return SubMenuState - The game that was selected (GAME_1, GAME_2, or GAME_3)
+ * @return SubMenuState - Selected mode or return to main menu
  */
 SubMenuState SubMenu_Run(SubMenuSystem* menu);
 

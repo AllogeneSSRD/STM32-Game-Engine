@@ -13,9 +13,10 @@ extern Joystick_t joystick_data;     // Current joystick readings
 static const char* menu_options[] = {
     "Mode 1", // 菜单选项
     "Mode 2", 
-    "Mode 3"
+    "Mode 3",
+    "Return"
 };
-#define NUM_MENU_OPTIONS 3
+#define NUM_MENU_OPTIONS 4
 
 // Frame rate for menu (in milliseconds)
 #define MENU_FRAME_TIME_MS 30  // ~33 FPS
@@ -27,7 +28,7 @@ static void render_home_menu(SubMenuSystem* menu) {
     LCD_Fill_Buffer(0);
     
     // Title
-    LCD_printString("Aircraft Shooting", 50, 10, 1, 3);
+    LCD_printString("Aircraft Shooting", 20, 10, 1, 2);
     
     // Menu options with selection highlight
     for (int i = 0; i < NUM_MENU_OPTIONS; i++) {
@@ -102,6 +103,8 @@ SubMenuState SubMenu_Run(SubMenuSystem* menu) {
                 selected_game = SUBMENU_1_STATE_2;
             } else if (menu->selected_option == 2) {
                 selected_game = SUBMENU_1_STATE_3;
+            } else if (menu->selected_option == 3) {
+                selected_game = SUBMENU_1_STATE_RETURN_MAIN;
             }
             break;  // Exit menu loop - game selected!
         }

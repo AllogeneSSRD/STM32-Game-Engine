@@ -24,6 +24,9 @@ extern Buzzer_cfg_t buzzer_cfg; // Buzzer control
 #define TILE_WALL   1   //Wall, player cannot pass
 #define TILE_DOT    2   //Dots
 
+//Runtime map, it should be revised during the game as player eats dots
+static uint8_t game_map[MAP_ROWS][MAP_COLS];
+
 //MAP DEFINITIONS  (1 = wall, 2 = dot, 0 = open)
 //Three different maps — one per difficulty level
 
@@ -93,6 +96,20 @@ static const uint8_t map3[MAP_ROWS][MAP_COLS] = {
     {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
 };
 
+static void Mapmatching(DifficultyState diffi)
+{
+    if (diffi == DIFFICULTY_EASY) {
+        memcpy(game_map, map1, sizeof(game_map));//Copy map1 to game_map for runtime use
+    }
+    else if (diffi == DIFFICULTY_NORMAL) {
+        memcpy(game_map, map2, sizeof(game_map));//Copy map2 to game_map for runtime use
+    }
+    else { // DIFFICULTY_HARD
+        memcpy(game_map, map3, sizeof(game_map));//Copy map3 to game_map for runtime use
+    }
+}
+
+
 MenuState Game3_Run(void) 
 {
     MenuState exit_state = MENU_STATE_HOME;
@@ -107,6 +124,11 @@ MenuState Game3_Run(void)
     //Run difficulty menu
     selected_diffi = Difficulty_Run(&diffi);
 
+    //Match the selected difficulty to the corresponding map
+    Mapmatching(selected_diffi);
+    
+    int remaining_lives = 3; //Player starts with 3 lives
+    int score = 0; //Player's score starts at 0
 
 
     return exit_state;  // Tell main where to go next

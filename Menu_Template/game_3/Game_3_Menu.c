@@ -1,4 +1,4 @@
-#include "Menu.h"
+#include "Game_3_Menu.h"
 #include "LCD.h"
 #include "InputHandler.h"
 #include "Joystick.h"
@@ -28,7 +28,7 @@ static void render_difficulty_menu(DifficultySystem* diffi)
         LCD_Fill_Buffer(0);
 
         // Title
-        LCD_printString("SELECT DIFFICULTY", 20, 10, 1, 3);
+        LCD_printString("SELECT DIFFICULTY", 20, 10, 1, 2);
 
         // List options with highlight
         for (int i = 0; i < NUM_DIFFICULTY_OPTIONS; i++) {

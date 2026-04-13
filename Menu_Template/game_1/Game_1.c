@@ -1,6 +1,7 @@
 #include "Game_1.h"
 #include "InputHandler.h"
 #include "Menu.h"
+#include "SubMenu_1.h"
 #include "LCD.h"
 #include "PWM.h"
 #include "Buzzer.h"
@@ -27,11 +28,34 @@ static int8_t move_direction = 1;
 // Frame rate for this game (in milliseconds)
 #define GAME1_FRAME_TIME_MS 30  // ~33 FPS
 
+static const char* mode_options[] = {
+    "MODE 1", // 模式内部显示
+    "MODE 2",
+    "MODE 3"
+};
+
 MenuState Game1_Run(void) {
+    SubMenuSystem submenu;
+    SubMenuState selected_mode;
+
+    SubMenu_Init(&submenu);
+    selected_mode = SubMenu_Run(&submenu);
+    if (selected_mode == SUBMENU_1_STATE_HOME) {
+        return MENU_STATE_HOME;
+    }
+
     // Initialize game state
     animation_counter = 0;
     moving_x = 0;
     move_direction = 1;
+
+    // 测试菜单选项
+    int16_t move_step = 3;
+    if (selected_mode == SUBMENU_1_STATE_2) {
+        move_step = 5;
+    } else if (selected_mode == SUBMENU_1_STATE_3) {
+        move_step = 2;
+    }
     
     // Play a brief startup sound
     buzzer_tone(&buzzer_cfg, 1000, 30);  // 1kHz at 30% volume
@@ -58,7 +82,7 @@ MenuState Game1_Run(void) {
         animation_counter++;
         
         // Simple animation: move object back and forth
-        moving_x += move_direction * 3;
+        moving_x += move_direction * move_step;
         if (moving_x >= 200 || moving_x <= 0) {
             move_direction *= -1;
         }
@@ -72,6 +96,7 @@ MenuState Game1_Run(void) {
         
         // Title
         LCD_printString("GAME 1", 60, 10, 1, 3);
+        LCD_printString((char*)mode_options[selected_mode - SUBMENU_1_STATE_1], 60, 45, 1, 2);
         
         // Simple animated object (moving box)
         LCD_printString("[*]", 20 + moving_x, 100, 1, 3);
@@ -88,8 +113,8 @@ MenuState Game1_Run(void) {
         LCD_printString(pwm_str, 30, 195, 1, 1);
         
         // Instructions
-        LCD_printString("Press BT3 to", 40, 220, 1, 1);
-        LCD_printString("Return to Menu", 40, 235, 1, 1);
+        LCD_printString("Press BT3 to", 40, 210, 1, 1);
+        LCD_printString("Return to Menu", 40, 225, 1, 1);
         
         LCD_Refresh(&cfg0);
         

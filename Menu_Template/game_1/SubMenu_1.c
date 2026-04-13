@@ -1,4 +1,4 @@
-#include "Menu.h"
+#include "SubMenu_1.h"
 #include "LCD.h"
 #include "InputHandler.h"
 #include "Joystick.h"
@@ -11,11 +11,12 @@ extern Joystick_t joystick_data;     // Current joystick readings
 
 // Menu options
 static const char* menu_options[] = {
-    "Aircraft Shooting",
-    "Game 2", 
-    "Game 3"
+    "Mode 1", // 菜单选项
+    "Mode 2", 
+    "Mode 3",
+    "Return"
 };
-#define NUM_MENU_OPTIONS 3
+#define NUM_MENU_OPTIONS 4
 
 // Frame rate for menu (in milliseconds)
 #define MENU_FRAME_TIME_MS 30  // ~33 FPS
@@ -23,11 +24,11 @@ static const char* menu_options[] = {
 /**
  * @brief Render the home menu screen
  */
-static void render_home_menu(MenuSystem* menu) {
+static void render_home_menu(SubMenuSystem* menu) {
     LCD_Fill_Buffer(0);
     
     // Title
-    LCD_printString("MAIN MENU", 50, 10, 1, 3);
+    LCD_printString("Aircraft Shooting", 20, 10, 1, 2);
     
     // Menu options with selection highlight
     for (int i = 0; i < NUM_MENU_OPTIONS; i++) {
@@ -54,13 +55,13 @@ static void render_home_menu(MenuSystem* menu) {
 // PUBLIC API IMPLEMENTATION
 // ==============================================
 
-void Menu_Init(MenuSystem* menu) {
+void SubMenu_Init(SubMenuSystem* menu) {
     menu->selected_option = 0;
 }
 
-MenuState Menu_Run(MenuSystem* menu) {
+SubMenuState SubMenu_Run(SubMenuSystem* menu) {
     static Direction last_direction = CENTRE;  // Track last direction for debouncing
-    MenuState selected_game = MENU_STATE_HOME;  // Which game was selected
+    SubMenuState selected_game = SUBMENU_1_STATE_HOME;  // Which game was selected
     
     // Menu's own loop - runs until game is selected
     while (1) {
@@ -97,11 +98,13 @@ MenuState Menu_Run(MenuSystem* menu) {
         if (current_input.btn3_pressed) {
             // User pressed button - select the highlighted option
             if (menu->selected_option == 0) {
-                selected_game = MENU_STATE_GAME_1;
+                selected_game = SUBMENU_1_STATE_1;
             } else if (menu->selected_option == 1) {
-                selected_game = MENU_STATE_GAME_2;
+                selected_game = SUBMENU_1_STATE_2;
             } else if (menu->selected_option == 2) {
-                selected_game = MENU_STATE_GAME_3;
+                selected_game = SUBMENU_1_STATE_3;
+            } else if (menu->selected_option == 3) {
+                selected_game = SUBMENU_1_STATE_RETURN_MAIN;
             }
             break;  // Exit menu loop - game selected!
         }

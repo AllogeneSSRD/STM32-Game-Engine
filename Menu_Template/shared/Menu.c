@@ -13,7 +13,7 @@ extern Joystick_t joystick_data;     // Current joystick readings
 static const char* menu_options[] = {
     "Aircraft Shooting",
     "Game 2", 
-    "Game 3"
+    "Pac-Man"
 };
 #define NUM_MENU_OPTIONS 3
 

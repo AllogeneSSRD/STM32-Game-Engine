@@ -13,8 +13,13 @@ extern ST7789V2_cfg_t cfg0;
 extern PWM_cfg_t pwm_cfg;      // LED PWM control
 extern Buzzer_cfg_t buzzer_cfg; // Buzzer control
 
+
+#define MAP_ORIGIN_X 20
+#define MAP_ORIGIN_Y 60
+
+
 //Map size = 20 x 18 = 360 tiles
-#define TILE        8          //8 pixels per map tile for LCD display
+#define TILE        10          //8 pixels per map tile for LCD display
 #define MAP_COLS    20         // number of columns in the map grid
 #define MAP_ROWS    18         // number of rows in the map grid
 #define MAX_GHOSTS  4          // maximum number of ghosts on screen
@@ -109,6 +114,39 @@ static void Mapmatching(DifficultyState diffi)
     }
 }
 
+static void Draw_Map(void)
+{
+    // 先清屏
+    LCD_Fill_Buffer(0);
+
+    for (int row = 0; row < MAP_ROWS; row++) {
+        for (int col = 0; col < MAP_COLS; col++) {
+
+            // 当前格子的像素左上角
+            int px = MAP_ORIGIN_X + col * TILE;
+            int py = MAP_ORIGIN_Y + row * TILE;
+
+            if (game_map[row][col] == TILE_WALL) {
+                // 画墙：实心矩形
+                LCD_Draw_Rect(px, py, TILE, TILE, 1, 1);
+            }
+            else if (game_map[row][col] == TILE_DOT) {
+                // 画豆子：小圆点（居中）
+                LCD_Draw_Circle(
+                    px + TILE / 2,
+                    py + TILE / 2,
+                    2,          // 半径
+                    1,          // 颜色
+                    1
+                );
+            }
+            // TILE_EMPTY：什么都不画
+        }
+    }
+
+    LCD_Refresh(&cfg0);
+}
+
 
 MenuState Game3_Run(void) 
 {
@@ -127,9 +165,20 @@ MenuState Game3_Run(void)
     //Match the selected difficulty to the corresponding map
     Mapmatching(selected_diffi);
     
-    int remaining_lives = 3; //Player starts with 3 lives
-    int score = 0; //Player's score starts at 0
+    unsigned long remaining_lives = 3; //Player starts with 3 lives
+    unsigned long score = 0; //Player's score starts at 0
 
+    // ✅ 只画地图
+    Draw_Map();
+    char lives_text[32];
+    char score_text[32];
+    sprintf(lives_text, "Lives: %lu", (unsigned long)remaining_lives);
+    sprintf(score_text, "Score: %lu", (unsigned long)score);
+    LCD_printString(lives_text, 10, 10, 2, 2);
+    LCD_printString(score_text, 130, 10, 10, 2);
+    LCD_Refresh(&cfg0);
+    // 停住，方便你观察
+    while (1);
 
     return exit_state;  // Tell main where to go next
 }

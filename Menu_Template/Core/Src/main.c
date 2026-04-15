@@ -178,7 +178,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 int main(void)
 {
     /* MCU Configuration */
-     HAL_Init();
+    HAL_Init();
     SystemClock_Config();
     PeriphCommonClock_Config();
 

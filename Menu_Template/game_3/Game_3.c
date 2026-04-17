@@ -22,9 +22,9 @@ extern Joystick_cfg_t joystick_cfg; //Joystick control
 
 //Map size = 20 x 18 = 360 tiles
 #define TILE        10          //8 pixels per map tile for LCD display
-#define MAP_COLS    20         // number of columns in the map grid
-#define MAP_ROWS    18         // number of rows in the map grid
-#define MAX_GHOSTS  4          // maximum number of ghosts on screen
+#define MAP_COLS    20         //Number of columns in the map grid
+#define MAP_ROWS    18         //Number of rows in the map grid
+#define GHOSTS  4          //Number of ghosts on screen
 
 // Tile types stored in the map array
 #define TILE_EMPTY  0   //Free space, player can pass
@@ -33,22 +33,25 @@ extern Joystick_cfg_t joystick_cfg; //Joystick control
 
 //Count dots amount
 // Easy / Map 1
-#define TOTAL_DOTS_MAP1 128
+#define TOTAL_DOTS_MAP1 130
 
 // Normal / Map 2
-#define TOTAL_DOTS_MAP2 146
+#define TOTAL_DOTS_MAP2 152
 
 // Hard / Map 3
-#define TOTAL_DOTS_MAP3 136
+#define TOTAL_DOTS_MAP3 154
 
 
 //Runtime map, it should be revised during the game as player eats dots
 static uint8_t game_map[MAP_ROWS][MAP_COLS];
 
-// Movement parameters
+//Pac-man Movement parameters
 #define PACMAN_MOVE_DELAY_MS 200 // Milliseconds between movement updates
-static uint32_t last_move_tick = 0;
+static uint32_t pacman_last_move_tick = 0;
 
+//Ghost Movement parameters
+static uint32_t ghost_move_delay_ms = 0;
+static uint32_t ghost_last_move_tick = 0;
 
 //MAP DEFINITIONS  (1 = wall, 2 = dot, 0 = open)
 //Three different maps — one per difficulty level
@@ -159,12 +162,13 @@ static void Draw_Map(void)
     }
 }
 
-// Initialize player coordinate
+// Initialize coordinate
 typedef struct {
     int16_t x;
     int16_t y;
-} Player_tile;
-static Player_tile pacman;
+} tile_pos;
+static tile_pos pacman;
+static tile_pos ghosts[GHOSTS];
 
 //Initialize player at center of screen
 static void Initialize_Player_Center(void)
@@ -239,6 +243,72 @@ static void Move_Pacman_One_Tile(void)
     }
 }
 
+//Ghost Placement coordinate
+static const tile_pos ghost_spawn_map1[GHOSTS] = {
+    {7, 7}, {12, 7}, {6, 12}, {13, 12}
+};
+
+static const tile_pos ghost_spawn_map2[GHOSTS] = {
+    {7, 7}, {12, 7}, {6, 13}, {13, 13}
+};
+
+static const tile_pos ghost_spawn_map3[GHOSTS] = {
+    {8, 7}, {11, 7}, {7, 13}, {12, 13}
+};
+
+//Initialize Ghost spawn
+static void Initialize_Ghosts(DifficultyState diffi)
+{
+    const tile_pos *spawn_points;
+
+    //According the difficulty, choosing the spawn position and speed
+    switch (diffi)
+    {
+        case DIFFICULTY_EASY:
+            spawn_points = ghost_spawn_map1;//The address of first element
+            ghost_move_delay_ms = 450;
+            break;
+        case DIFFICULTY_NORMAL:
+            spawn_points = ghost_spawn_map2;
+            ghost_move_delay_ms = 300;
+            break;
+        case DIFFICULTY_HARD:
+            spawn_points = ghost_spawn_map3;
+            ghost_move_delay_ms = 180;
+            break;
+    }
+
+    for (int i = 0; i < GHOSTS; i++)//Load each coordinate to ghost by reference
+    {
+        ghosts[i].x = spawn_points[i].x;
+        ghosts[i].y = spawn_points[i].y;
+    }
+}
+
+//Draw Ghost
+static void Draw_Ghosts(void)
+{
+    // Ghost 1
+    int px0 = MAP_ORIGIN_X + ghosts[0].x * TILE + TILE / 2;
+    int py0 = MAP_ORIGIN_Y + ghosts[0].y * TILE + TILE / 2;
+    LCD_Draw_Circle(px0, py0, 4, 2, 1);
+
+    // Ghost 2
+    int px1 = MAP_ORIGIN_X + ghosts[1].x * TILE + TILE / 2;
+    int py1 = MAP_ORIGIN_Y + ghosts[1].y * TILE + TILE / 2;
+    LCD_Draw_Circle(px1, py1, 4, 6, 1);
+
+    // Ghost 3
+    int px2 = MAP_ORIGIN_X + ghosts[2].x * TILE + TILE / 2;
+    int py2 = MAP_ORIGIN_Y + ghosts[2].y * TILE + TILE / 2;
+    LCD_Draw_Circle(px2, py2, 4, 4, 1);
+
+    // Ghost 4
+    int px3 = MAP_ORIGIN_X + ghosts[3].x * TILE + TILE / 2;
+    int py3 = MAP_ORIGIN_Y + ghosts[3].y * TILE + TILE / 2;
+    LCD_Draw_Circle(px3, py3, 4, 3, 1);
+}
+
 MenuState Game3_Run(void)
 {
     MenuState exit_state = MENU_STATE_HOME;
@@ -282,9 +352,14 @@ MenuState Game3_Run(void)
     //Game starts
     while (remaining_lives > 0) 
     {
-        //Reset player position
+        //Reset player and ghost position
         Initialize_Player_Center();
+        Initialize_Ghosts(selected_diffi);
         HAL_Delay(300);
+
+        // Reset movement timers, preventing moving immediatetly
+        pacman_last_move_tick = HAL_GetTick(); 
+        ghost_last_move_tick = HAL_GetTick();
 
         //Each life loop
         while(1)
@@ -293,13 +368,13 @@ MenuState Game3_Run(void)
             Joystick_Read(&joystick_cfg, &joystick_data);
             Movement_to_Joystick(&joystick_data);
 
-            //Step 2. Rate-limited movement
+            //Step 2. Rate-limited movement, push the stick for above 200ms to move one tile
             uint32_t now = HAL_GetTick();
-            if ((now - last_move_tick) >= PACMAN_MOVE_DELAY_MS &&
+            if ((now - pacman_last_move_tick) >= PACMAN_MOVE_DELAY_MS &&
                 pacman_dir != DIR_NONE)
             {
                 Move_Pacman_One_Tile();
-                last_move_tick = now;
+                pacman_last_move_tick = now;
             }
 
             //Step 3. Draw the map and player
@@ -307,6 +382,8 @@ MenuState Game3_Run(void)
             Draw_Map();
             //Draw the player at the center
             Draw_Player();
+            //Draw ghosts at the corner
+            Draw_Ghosts();
 
             //Step 4. Output lives and score
             char lives_text[32];

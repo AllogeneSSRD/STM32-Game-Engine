@@ -250,6 +250,7 @@ void Initialize_Ghosts(DifficultyState diffi)
             spawn_points = ghost_spawn_map3;
             ghost_move_delay_ms = 180;
             break;
+        default: break;
     }
 
     for (int i = 0; i < GHOSTS; i++)//Load each coordinate to ghost by reference
@@ -339,6 +340,12 @@ MenuState Game3_Run(void)
 
     //Run difficulty menu
     selected_diffi = Difficulty_Run(&diffi);
+    
+    //Back to main menu
+    if (selected_diffi == BACK) {
+        return exit_state;
+    }
+
 
     //Match the selected difficulty to the corresponding map
     Mapmatching(selected_diffi);
@@ -359,6 +366,7 @@ MenuState Game3_Run(void)
         case DIFFICULTY_HARD:
             total_dots = TOTAL_DOTS_MAP3;
             break;
+        default: break;
     }
 
     unsigned long remaining_lives = 3; //Player starts with 3 lives
@@ -392,6 +400,7 @@ MenuState Game3_Run(void)
                 Move_Pacman_One_Tile();
                 pacman_last_move_tick = now;
             }
+
             //Ghost: move one tile automatically based on difficulty speed
             if ((now - ghost_last_move_tick) >= ghost_move_delay_ms)
             {
@@ -445,12 +454,13 @@ MenuState Game3_Run(void)
                     buzzer_off(&buzzer_cfg);
 
                     // LED flashing
-                    for (int i = 0; i < 3; i++)
+                    PWM_SetFreq(&pwm_cfg, 1000); //Reset frequency
+                    for (int j = 0; j < 10; j++)
                     {
-                        PWM_SetDuty(&pwm_cfg, 100);  //Turn on
+                        PWM_SetDuty(&pwm_cfg, 5);  //Turn on
                         HAL_Delay(120);
 
-                        PWM_SetDuty(&pwm_cfg, 0);   //Turn off
+                        PWM_SetDuty(&pwm_cfg, 100);   //Turn off
                         HAL_Delay(120);
                     }
 
@@ -473,7 +483,12 @@ MenuState Game3_Run(void)
 
                 //Output victory message
                 LCD_Fill_Buffer(0);
-                LCD_printString("YOU WIN!", 70, 110, 1, 3);
+                LCD_printString("YOU WIN!", 40, 120, 1, 3);
+                LCD_Refresh(&cfg0);
+                HAL_Delay(1000);
+
+                LCD_Fill_Buffer(0);
+                LCD_printString("BACK TO MENU...", 40, 120, 1, 2);
                 LCD_Refresh(&cfg0);
 
                 HAL_Delay(4000);
@@ -494,7 +509,12 @@ MenuState Game3_Run(void)
 
     // Output game over message
     LCD_Fill_Buffer(0);
-    LCD_printString("GAME OVER", 60, 110, 1, 3);
+    LCD_printString("GAME OVER", 40, 120, 1, 3);
+    LCD_Refresh(&cfg0);
+    HAL_Delay(1000);
+
+    LCD_Fill_Buffer(0);
+    LCD_printString("BACK TO MENU...", 40, 120, 1, 2);
     LCD_Refresh(&cfg0);
 
     HAL_Delay(4000);

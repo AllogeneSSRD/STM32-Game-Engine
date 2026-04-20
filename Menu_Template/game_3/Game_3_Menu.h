@@ -7,12 +7,13 @@ typedef enum {
     DIFFICULTY_EASY = 0, //Easy mode
     DIFFICULTY_NORMAL,  //Normal mode
     DIFFICULTY_HARD,    //Hard mode
+    BACK                //Back to main menu
 } DifficultyState;
 
 // Difficulty system structure
 typedef struct {
 
-    uint8_t selected_option;    // Which menu option is highlighted (0-2)
+    uint8_t selected_option;    // Which menu option is highlighted (0-3)
 
 } DifficultySystem;
 

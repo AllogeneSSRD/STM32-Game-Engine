@@ -9,7 +9,7 @@ extern ST7789V2_cfg_t cfg0;  // LCD configuration from main.c
 extern Joystick_cfg_t joystick_cfg;  // Joystick configuration
 extern Joystick_t joystick_data;     // Current joystick readings
 
-#define NUM_DIFFICULTY_OPTIONS 3
+#define NUM_DIFFICULTY_OPTIONS 4
 
 // Frame rate for menu (in milliseconds)
 #define MENU_FRAME_TIME_MS 30  // ~33 FPS
@@ -19,7 +19,8 @@ extern Joystick_t joystick_data;     // Current joystick readings
 static const char* difficulty_options[] = {
         "Easy",
         "Normal",
-        "Hard"
+        "Hard",
+        "Back"
 };
 
 //Render difficulty menu
@@ -32,7 +33,7 @@ static void render_difficulty_menu(DifficultySystem* diffi)
 
         // List options with highlight
         for (int i = 0; i < NUM_DIFFICULTY_OPTIONS; i++) {
-            uint16_t y_pos = 110 + (i * 40);
+            uint16_t y_pos = 70 + (i * 40);
             uint8_t text_size = 2;
 
             if (i == diffi->selected_option) {
@@ -102,7 +103,9 @@ DifficultyState Difficulty_Run(DifficultySystem* diffi)
                 selected_diffi = DIFFICULTY_NORMAL;
             } else if (diffi->selected_option == 2) {
                 selected_diffi = DIFFICULTY_HARD;
-            }   
+            } else if (diffi->selected_option == 3) {
+                selected_diffi = BACK;
+            }  
             break;  // Exit difficulty loop - game selected!
         }
 

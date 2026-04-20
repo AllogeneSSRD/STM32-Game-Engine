@@ -7,6 +7,7 @@
 #include "Buzzer.h"
 #include "stm32l4xx_hal.h"
 #include "Joystick.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -16,37 +17,10 @@ extern Buzzer_cfg_t buzzer_cfg; // Buzzer control
 extern Joystick_cfg_t joystick_cfg; //Joystick control
 
 
-#define MAP_ORIGIN_X 20
-#define MAP_ORIGIN_Y 60
-
-
-//Map size = 20 x 18 = 360 tiles
-#define TILE        10          //8 pixels per map tile for LCD display
-#define MAP_COLS    20         //Number of columns in the map grid
-#define MAP_ROWS    18         //Number of rows in the map grid
-#define GHOSTS  4          //Number of ghosts on screen
-
-// Tile types stored in the map array
-#define TILE_EMPTY  0   //Free space, player can pass
-#define TILE_WALL   1   //Wall, player cannot pass
-#define TILE_DOT    2   //Dots
-
-//Count dots amount
-// Easy / Map 1
-#define TOTAL_DOTS_MAP1 130
-
-// Normal / Map 2
-#define TOTAL_DOTS_MAP2 152
-
-// Hard / Map 3
-#define TOTAL_DOTS_MAP3 154
-
-
 //Runtime map, it should be revised during the game as player eats dots
 static uint8_t game_map[MAP_ROWS][MAP_COLS];
 
 //Pac-man Movement parameters
-#define PACMAN_MOVE_DELAY_MS 200 // Milliseconds between movement updates
 static uint32_t pacman_last_move_tick = 0;
 
 //Ghost Movement parameters
@@ -123,7 +97,7 @@ static const uint8_t map3[MAP_ROWS][MAP_COLS] = {
 };
 
 //Matching maps of different levels to runtime map
-static void Mapmatching(DifficultyState diffi)
+void Mapmatching(DifficultyState diffi)
 {
     if (diffi == DIFFICULTY_EASY) {
         memcpy(game_map, map1, sizeof(game_map));//Copy map1 to game_map for runtime use
@@ -136,7 +110,7 @@ static void Mapmatching(DifficultyState diffi)
     }
 }
 
-static void Draw_Map(void)
+void Draw_Map(void)
 {
     //Clear the screen
     LCD_Fill_Buffer(0);
@@ -162,23 +136,19 @@ static void Draw_Map(void)
     }
 }
 
-// Initialize coordinate
-typedef struct {
-    int16_t x;
-    int16_t y;
-} tile_pos;
+//Calling coordinate structure
 static tile_pos pacman;
 static tile_pos ghosts[GHOSTS];
 
 //Initialize player at center of screen
-static void Initialize_Player_Center(void)
+void Initialize_Player_Center(void)
 {
     pacman.x = MAP_COLS / 2 - 1;   // 9
     pacman.y = MAP_ROWS / 2 + 1;  // 10
 }
 
 //Draw the player
-static void Draw_Player(void)
+void Draw_Player(void)
 {
     //tile to pixel
     int px = MAP_ORIGIN_X + pacman.x * TILE + TILE / 2;
@@ -187,18 +157,22 @@ static void Draw_Player(void)
     LCD_Draw_Circle(px, py, 4, 5, 1);//Larger than dots
 }
 
-//Define movement direction
-typedef enum {
-    DIR_NONE = 0,
-    DIR_UP,
-    DIR_DOWN,
-    DIR_LEFT,
-    DIR_RIGHT
-} PacmanDirection;
+//Calling pacman movement direction structure
 static PacmanDirection pacman_dir = DIR_NONE; //Initialize to none, staying still firstly
 
+//Ghost movement direction, setting initial direction
+static uint8_t ghost_dir[GHOSTS] = {1, 2, 3, 4};
+
+//Random number generater for generating random direction
+static uint8_t simple_rand(void)
+{
+    static uint32_t n = 1;
+    n = n * 1664525 + 1013904223; // LCG: Linear Congruential Generator for random numbers
+    return (uint8_t)((n >> 24) % 4) + 1; //Use highest 8 digits due to better randomness, becomes 1-4 finally
+}
+
 //Movement to Joystick direction
-static void Movement_to_Joystick(Joystick_t *joystick_data)
+void Movement_to_Joystick(Joystick_t *joystick_data)
 {
     switch (joystick_data->direction)
     {
@@ -215,7 +189,7 @@ static void Movement_to_Joystick(Joystick_t *joystick_data)
 }
 
 //Pacman Movement
-static void Move_Pacman_One_Tile(void)
+void Move_Pacman_One_Tile(void)
 {
     int16_t next_x = pacman.x;
     int16_t next_y = pacman.y;
@@ -227,13 +201,13 @@ static void Move_Pacman_One_Tile(void)
         case DIR_LEFT:  next_x--; break;
         case DIR_RIGHT: next_x++; break;
         default:
-            return; // DIR_NONE，staying still
+            return; // DIR_NONE，staying still this time
     }
 
     //Clamp position to map boundaries (prevent player from leaving the display)
     if (next_x < 0 || next_x >= MAP_COLS ||
         next_y < 0 || next_y >= MAP_ROWS)
-        return;
+        return; //Jump out of the function, staying still this time
 
     //Clamp position to wall boundaries (prevent player from going through the wall)
     if (game_map[next_y][next_x] != TILE_WALL)
@@ -257,7 +231,7 @@ static const tile_pos ghost_spawn_map3[GHOSTS] = {
 };
 
 //Initialize Ghost spawn
-static void Initialize_Ghosts(DifficultyState diffi)
+void Initialize_Ghosts(DifficultyState diffi)
 {
     const tile_pos *spawn_points;
 
@@ -282,11 +256,12 @@ static void Initialize_Ghosts(DifficultyState diffi)
     {
         ghosts[i].x = spawn_points[i].x;
         ghosts[i].y = spawn_points[i].y;
+        ghost_dir[i] = i + 1; //Reset position, corresponding to elements in it
     }
 }
 
 //Draw Ghost
-static void Draw_Ghosts(void)
+void Draw_Ghosts(void)
 {
     // Ghost 1
     int px0 = MAP_ORIGIN_X + ghosts[0].x * TILE + TILE / 2;
@@ -307,6 +282,46 @@ static void Draw_Ghosts(void)
     int px3 = MAP_ORIGIN_X + ghosts[3].x * TILE + TILE / 2;
     int py3 = MAP_ORIGIN_Y + ghosts[3].y * TILE + TILE / 2;
     LCD_Draw_Circle(px3, py3, 4, 3, 1);
+}
+
+//Ghost Movement
+void Move_Ghosts_One_Tile(void)
+{
+    for (int i = 0; i < GHOSTS; i++)
+    {
+        int16_t next_x = ghosts[i].x;
+        int16_t next_y = ghosts[i].y;
+
+        switch (ghost_dir[i])
+        {
+            case DIR_UP:    next_y--; break;
+            case DIR_DOWN:  next_y++; break;
+            case DIR_LEFT:  next_x--; break;
+            case DIR_RIGHT: next_x++; break;
+            default:
+                ghost_dir[i] = simple_rand(); //Invalid direction, randomizing again
+                continue;                     // Jump to next ghost, this time ghost won't move
+        }
+
+        //Clamp position to map boundaries (prevent ghosts from leaving the display)
+        if (next_x < 0 || next_x >= MAP_COLS ||
+            next_y < 0 || next_y >= MAP_ROWS)
+        {
+            ghost_dir[i] = simple_rand(); 
+            continue;
+        }
+
+        //Clamp position to wall boundaries (prevent ghosts from going through the wall)
+        if (game_map[next_y][next_x] != TILE_WALL)
+        {
+            ghosts[i].x = next_x;
+            ghosts[i].y = next_y;
+        }
+        else
+        {
+            ghost_dir[i] = simple_rand(); 
+        }
+    }
 }
 
 MenuState Game3_Run(void)
@@ -368,13 +383,20 @@ MenuState Game3_Run(void)
             Joystick_Read(&joystick_cfg, &joystick_data);
             Movement_to_Joystick(&joystick_data);
 
-            //Step 2. Rate-limited movement, push the stick for above 200ms to move one tile
+            //Step 2. Rate-limited movement
+            //Pacman: push the stick for above 200ms to move one tile
             uint32_t now = HAL_GetTick();
             if ((now - pacman_last_move_tick) >= PACMAN_MOVE_DELAY_MS &&
                 pacman_dir != DIR_NONE)
             {
                 Move_Pacman_One_Tile();
                 pacman_last_move_tick = now;
+            }
+            //Ghost: move one tile automatically based on difficulty speed
+            if ((now - ghost_last_move_tick) >= ghost_move_delay_ms)
+            {
+                Move_Ghosts_One_Tile();
+                ghost_last_move_tick = now;
             }
 
             //Step 3. Draw the map and player
@@ -411,7 +433,34 @@ MenuState Game3_Run(void)
                 buzzer_off(&buzzer_cfg);
             }
 
-            //Step 6. Caught by ghosts
+            //Step 6. Caught by ghosts 
+            uint8_t is_life_lost = 0;
+            for (uint8_t i = 0; i < GHOSTS; i++)
+            {
+                if (ghosts[i].x == pacman.x && ghosts[i].y == pacman.y)
+                {
+                    //Caught audio
+                    buzzer_note(&buzzer_cfg, NOTE_D4, 60);
+                    HAL_Delay(250);
+                    buzzer_off(&buzzer_cfg);
+
+                    // LED flashing
+                    for (int i = 0; i < 3; i++)
+                    {
+                        PWM_SetDuty(&pwm_cfg, 100);  //Turn on
+                        HAL_Delay(120);
+
+                        PWM_SetDuty(&pwm_cfg, 0);   //Turn off
+                        HAL_Delay(120);
+                    }
+
+                    remaining_lives--;
+                    is_life_lost = 1;
+                    break;
+                }
+            }
+
+            if (is_life_lost == 1) break; //Jump out of loop of this life
 
             //Step 7. Collect all dots           
             if (score == total_dots)

@@ -110,31 +110,6 @@ void Mapmatching(DifficultyState diffi)
     }
 }
 
-void Draw_Map(void)
-{
-    //Clear the screen
-    LCD_Fill_Buffer(0);
-
-    for (int row = 0; row < MAP_ROWS; row++) 
-    {
-        for (int col = 0; col < MAP_COLS; col++) 
-        {
-            int px = MAP_ORIGIN_X + col * TILE;
-            int py = MAP_ORIGIN_Y + row * TILE;
-
-            if (game_map[row][col] == TILE_WALL) 
-            {
-                //Draw the walls
-                LCD_Draw_Rect(px, py, TILE, TILE, 1, 1);
-            }
-            else if (game_map[row][col] == TILE_DOT) 
-            {
-                //Draw thr dots, ensuring centered
-                LCD_Draw_Circle(px + TILE / 2, py + TILE / 2, 2, 1, 1);
-            }
-        }
-    }
-}
 
 //Calling coordinate structure
 static tile_pos pacman;

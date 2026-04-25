@@ -64,6 +64,14 @@ extern InputState current_input;
 #define TARGET_BOSS_COLOR 1
 #define TARGET_BOSS_HP 8
 
+#define TARGET_ITEM_WIDTH 10
+#define TARGET_ITEM_HEIGHT 10
+#define TARGET_ITEM_FALL_SPEED 1
+#define TARGET_ITEM_HEAL_COLOR 7
+#define TARGET_ITEM_SPREAD_COLOR 9
+#define TARGET_ITEM_HEAL_HP 2
+#define TARGET_ITEM_SPREAD_HP 1
+
 #define TARGET_SCORE_NORMAL 1
 #define TARGET_SCORE_ADVANCED 5
 #define TARGET_SCORE_BOSS 20
@@ -74,13 +82,17 @@ extern InputState current_input;
 #define BULLET_FIRE_INTERVAL_MS 300
 #define MAX_BULLETS 32
 
+#define SPREAD_POWERUP_DURATION_MS 7000
+#define SPREAD_BULLET_COUNT 5
+#define SPREAD_BULLET_OFFSET 10
+
 #define MAX_ENEMY_BULLETS 8
 #define ENEMY_BULLET_RADIUS 2
 #define ENEMY_BULLET_SPEED 2
 #define ENEMY_BULLET_COLOR 7
 
-#define EASY_WIN_SCORE 30
-#define HARD_WIN_SCORE 100
+#define EASY_WIN_SCORE 50
+#define HARD_WIN_SCORE 200
 
 #define BTN3_HOLD_MS 1500
 
@@ -100,13 +112,17 @@ typedef struct {
     uint16_t boss_fire_interval_ms;
     uint8_t advanced_spawn_chance;
     uint8_t boss_spawn_chance;
+    uint8_t heal_spawn_chance;
+    uint8_t spread_spawn_chance;
     uint16_t win_score; // 0 means endless mode
 } GameDifficulty;
 
 typedef enum {
     TARGET_TYPE_NORMAL = 0,
     TARGET_TYPE_ADVANCED,
-    TARGET_TYPE_BOSS
+    TARGET_TYPE_BOSS,
+    TARGET_TYPE_ITEM_HEAL,
+    TARGET_TYPE_ITEM_SPREAD
 } TargetType;
 
 uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
@@ -128,6 +144,13 @@ static uint8_t Get_Target_Radius(TargetType type);
 static uint8_t Get_Target_Color(TargetType type);
 static int16_t Get_Target_Initial_HP(TargetType type);
 static uint16_t Get_Target_Kill_Score(TargetType type);
+static uint8_t Is_Target_Item(TargetType type);
+static int32_t Max(int32_t a, int32_t b);
+static int32_t Clamp(int32_t value, int32_t min_value, int32_t max_value);
+static uint8_t Circle_Rect_Overlap(uint16_t circle_x, uint16_t circle_y, uint16_t circle_r,
+                                   uint16_t rect_center_x, uint16_t rect_center_y,
+                                   uint16_t rect_w, uint16_t rect_h);
+static void Draw_Target_Entity(uint16_t x, uint16_t y, TargetType type, uint8_t color);
 
 // ===== Game Function Implementations =====
 
@@ -152,6 +175,8 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.boss_fire_interval_ms = 700;
         cfg.advanced_spawn_chance = 35;
         cfg.boss_spawn_chance = 12;
+        cfg.heal_spawn_chance = 5;
+        cfg.spread_spawn_chance = 8;
         cfg.win_score = HARD_WIN_SCORE;
     }
     else if (selected_mode == SUBMENU_1_STATE_3)
@@ -160,9 +185,11 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.target_fall_speed = TARGET_FALL_SPEED;
         cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
         cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
-        cfg.boss_fire_interval_ms = 850;
+        cfg.boss_fire_interval_ms = 1000;
         cfg.advanced_spawn_chance = 30;
         cfg.boss_spawn_chance = 10;
+        cfg.heal_spawn_chance = 8;
+        cfg.spread_spawn_chance = 8;
         cfg.win_score = 0;
     }
     else
@@ -174,6 +201,8 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.boss_fire_interval_ms = 1200;
         cfg.advanced_spawn_chance = 20;
         cfg.boss_spawn_chance = 5;
+        cfg.heal_spawn_chance = 10;
+        cfg.spread_spawn_chance = 10;
         cfg.win_score = EASY_WIN_SCORE;
     }
 
@@ -185,38 +214,104 @@ static TargetType Pick_Target_Type(const GameDifficulty *difficulty)
     uint16_t r = Random_U16(100);
     if (r < difficulty->boss_spawn_chance)
         return TARGET_TYPE_BOSS;
-    if (r < (uint16_t)(difficulty->boss_spawn_chance + difficulty->advanced_spawn_chance))
+    r -= difficulty->boss_spawn_chance;
+
+    if (r < difficulty->advanced_spawn_chance)
         return TARGET_TYPE_ADVANCED;
-    else                                
-        return TARGET_TYPE_NORMAL;
+    r -= difficulty->advanced_spawn_chance;
+
+    if (r < difficulty->heal_spawn_chance)
+        return TARGET_TYPE_ITEM_HEAL;
+    r -= difficulty->heal_spawn_chance;
+
+    if (r < difficulty->spread_spawn_chance)
+        return TARGET_TYPE_ITEM_SPREAD;
+
+    return TARGET_TYPE_NORMAL;
 }
 
 static uint8_t Get_Target_Radius(TargetType type)
 {
-    if (type == TARGET_TYPE_ADVANCED)   return TARGET_ADVANCED_RADIUS;
-    if (type == TARGET_TYPE_BOSS)       return TARGET_BOSS_RADIUS;
-    else                                return TARGET_RADIUS;
+    if (type == TARGET_TYPE_ADVANCED)       return TARGET_ADVANCED_RADIUS;
+    if (type == TARGET_TYPE_BOSS)           return TARGET_BOSS_RADIUS;
+    if (type == TARGET_TYPE_ITEM_HEAL || type == TARGET_TYPE_ITEM_SPREAD)
+        return Max(TARGET_ITEM_WIDTH, TARGET_ITEM_HEIGHT) / 2; // Treat items as circles for collision
+    else                                    return TARGET_RADIUS;
 }
 
 static uint8_t Get_Target_Color(TargetType type)
 {
-    if (type == TARGET_TYPE_ADVANCED)   return TARGET_ADVANCED_COLOR;
-    if (type == TARGET_TYPE_BOSS)       return TARGET_BOSS_COLOR;
-    else                                return TARGET_COLOR;
+    if (type == TARGET_TYPE_ADVANCED)       return TARGET_ADVANCED_COLOR;
+    if (type == TARGET_TYPE_BOSS)           return TARGET_BOSS_COLOR;
+    if (type == TARGET_TYPE_ITEM_HEAL)      return TARGET_ITEM_HEAL_COLOR;
+    if (type == TARGET_TYPE_ITEM_SPREAD)    return TARGET_ITEM_SPREAD_COLOR;
+else                                        return TARGET_COLOR;
 }
 
 static int16_t Get_Target_Initial_HP(TargetType type)
 {
-    if (type == TARGET_TYPE_ADVANCED)   return TARGET_ADVANCED_HP;
-    if (type == TARGET_TYPE_BOSS)       return TARGET_BOSS_HP;
-    else                                return 1;
+    if (type == TARGET_TYPE_ADVANCED)       return TARGET_ADVANCED_HP;
+    if (type == TARGET_TYPE_BOSS)           return TARGET_BOSS_HP;
+    if (type == TARGET_TYPE_ITEM_HEAL)      return TARGET_ITEM_HEAL_HP;
+    if (type == TARGET_TYPE_ITEM_SPREAD)    return TARGET_ITEM_SPREAD_HP;
+    else                                    return 1;
 }
 
 static uint16_t Get_Target_Kill_Score(TargetType type)
 {
-    if (type == TARGET_TYPE_ADVANCED)   return TARGET_SCORE_ADVANCED;
-    if (type == TARGET_TYPE_BOSS)       return TARGET_SCORE_BOSS;
-    else                                return TARGET_SCORE_NORMAL;
+    if (type == TARGET_TYPE_ADVANCED)       return TARGET_SCORE_ADVANCED;
+    if (type == TARGET_TYPE_BOSS)           return TARGET_SCORE_BOSS;
+    else                                    return TARGET_SCORE_NORMAL;
+}
+
+static uint8_t Is_Target_Item(TargetType type)
+{
+    return (type == TARGET_TYPE_ITEM_HEAL || type == TARGET_TYPE_ITEM_SPREAD) ? 1 : 0;
+}
+
+static int32_t Max(int32_t a, int32_t b)
+{
+    return (a > b) ? a : b;
+}
+
+static int32_t Clamp(int32_t value, int32_t min_value, int32_t max_value)
+{
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static uint8_t Circle_Rect_Overlap(uint16_t circle_x, uint16_t circle_y, uint16_t circle_r,
+                                   uint16_t rect_center_x, uint16_t rect_center_y,
+                                   uint16_t rect_w, uint16_t rect_h)
+{
+    int32_t half_w      = rect_w / 2;
+    int32_t half_h      = rect_h / 2;
+    int32_t rect_left   = (int32_t)rect_center_x - half_w;
+    int32_t rect_top    = (int32_t)rect_center_y - half_h;
+    int32_t rect_right  = (int32_t)rect_center_x + half_w;
+    int32_t rect_bottom = (int32_t)rect_center_y + half_h;
+
+    int32_t closest_x = Clamp((int32_t)circle_x, rect_left, rect_right);
+    int32_t closest_y = Clamp((int32_t)circle_y, rect_top, rect_bottom);
+
+    int32_t dx = (int32_t)circle_x - closest_x;
+    int32_t dy = (int32_t)circle_y - closest_y;
+    return ((dx * dx) + (dy * dy) <= (int32_t)(circle_r * circle_r)) ? 1 : 0;
+}
+
+static void Draw_Target_Entity(uint16_t x, uint16_t y, TargetType type, uint8_t color)
+{
+    if (Is_Target_Item(type))
+    {
+        uint16_t draw_x = (x > (TARGET_ITEM_WIDTH / 2)) ? (x - (TARGET_ITEM_WIDTH / 2)) : 0;
+        uint16_t draw_y = (y > (TARGET_ITEM_HEIGHT / 2)) ? (y - (TARGET_ITEM_HEIGHT / 2)) : PLAY_AREA_Y0;
+        LCD_Draw_Rect(draw_x, draw_y, TARGET_ITEM_WIDTH, TARGET_ITEM_HEIGHT, color, 1);
+    }
+    else
+    {
+        LCD_Draw_Circle(x, y, Get_Target_Radius(type), color, 1);
+    }
 }
 
 // Reference: Unit 3.2 Joystick
@@ -316,7 +411,7 @@ void Place_Target(uint8_t index,
             target_hp[index] = Get_Target_Initial_HP(picked_type);
             target_last_fire_tick[index] = HAL_GetTick();
 
-            LCD_Draw_Circle(x, y, spawn_radius, spawn_color, 1);
+            Draw_Target_Entity(x, y, picked_type, spawn_color);
             return;
         }
 
@@ -386,6 +481,8 @@ MenuState Game1_Run(void)
         uint16_t enemy_bullet_x[MAX_ENEMY_BULLETS] = {0};
         int16_t enemy_bullet_y[MAX_ENEMY_BULLETS] = {0};
         uint8_t enemy_bullet_active[MAX_ENEMY_BULLETS] = {0};
+
+        uint32_t spread_shot_until_ms = 0;
 
         // Initialize score & life
         uint16_t score = 0;
@@ -517,15 +614,37 @@ MenuState Game1_Run(void)
             bool fired = false;
             if ((frame_start - last_bullet_move_tick) >= difficulty.bullet_fire_interval_ms)
             {
-                for (uint8_t i = 0; i < MAX_BULLETS; i++)
+                if (spread_shot_until_ms > frame_start)
                 {
-                    if (!bullet_active[i])
+                    for (int8_t spread = 0; spread < SPREAD_BULLET_COUNT; spread++)
                     {
-                        bullet_x[i] = player_x;
-                        bullet_y[i] = (int16_t)player_y - PLAYER_RADIUS - BULLET_RADIUS;
-                        bullet_active[i] = 1;
-                        fired = true;
-                        break;
+                        for (uint8_t i = 0; i < MAX_BULLETS; i++)
+                        {
+                            if (!bullet_active[i])
+                            {
+                                int32_t bullet_spawn_x = (int32_t)player_x + ((spread - (SPREAD_BULLET_COUNT / 2)) * SPREAD_BULLET_OFFSET);
+                                bullet_spawn_x = Clamp(bullet_spawn_x, BULLET_RADIUS, LCD_WIDTH - BULLET_RADIUS - 1);
+                                bullet_x[i] = (uint16_t)bullet_spawn_x;
+                                bullet_y[i] = (int16_t)player_y - PLAYER_RADIUS - BULLET_RADIUS;
+                                bullet_active[i] = 1;
+                                fired = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    for (uint8_t i = 0; i < MAX_BULLETS; i++)
+                    {
+                        if (!bullet_active[i])
+                        {
+                            bullet_x[i] = player_x;
+                            bullet_y[i] = (int16_t)player_y - PLAYER_RADIUS - BULLET_RADIUS;
+                            bullet_active[i] = 1;
+                            fired = true;
+                            break;
+                        }
                     }
                 }
                 if (fired) last_bullet_move_tick = frame_start;
@@ -558,7 +677,7 @@ MenuState Game1_Run(void)
                     uint8_t radius = Get_Target_Radius(target_type[i]);
                     uint8_t color = Get_Target_Color(target_type[i]);
 
-                    LCD_Draw_Circle(target_x[i], target_y[i], radius, 0, 1);
+                    Draw_Target_Entity(target_x[i], target_y[i], target_type[i], 0);
 
                     uint16_t new_target_y = target_y[i] + difficulty.target_fall_speed;
                     if (new_target_y >= (LCD_HEIGHT - radius))
@@ -569,7 +688,7 @@ MenuState Game1_Run(void)
                     }
 
                     target_y[i] = new_target_y;
-                    LCD_Draw_Circle(target_x[i], target_y[i], radius, color, 1);
+                    Draw_Target_Entity(target_x[i], target_y[i], target_type[i], color);
 
                     // Boss bullet spawn
                     if (target_type[i] == TARGET_TYPE_BOSS &&
@@ -628,19 +747,48 @@ MenuState Game1_Run(void)
                 uint8_t target_radius = Get_Target_Radius(target_type[i]);
 
                 // Check if player circle overlaps with target
-                if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS, 
-                                    target_x[i], target_y[i], target_radius))
+                uint8_t player_hit = 0;
+                if (Is_Target_Item(target_type[i]))
+                {
+                    player_hit = Circle_Rect_Overlap(player_x, player_y, PLAYER_RADIUS,
+                                                     target_x[i], target_y[i],
+                                                     TARGET_ITEM_WIDTH, TARGET_ITEM_HEIGHT);
+                }
+                else
+                {
+                    player_hit = Circles_Overlap(player_x, player_y, PLAYER_RADIUS,
+                                                 target_x[i], target_y[i], target_radius);
+                }
+
+                if (player_hit)
                 {
                     // When the player collides with the enemy, Erase enemy
-                    LCD_Draw_Circle(target_x[i], target_y[i], target_radius, 0, 1);
+                    Draw_Target_Entity(target_x[i], target_y[i], target_type[i], 0);
+
+                    if (target_type[i] == TARGET_TYPE_ITEM_HEAL)
+                    {
+                        if (lives < PLAYER_HP * 2) // Prevent overheal
+                        {
+                            lives++;
+                        }
+                    }
+                    else if (target_type[i] == TARGET_TYPE_ITEM_SPREAD)
+                    {
+                        spread_shot_until_ms = frame_start + SPREAD_POWERUP_DURATION_MS;
+                    }
+                    else
+                    {
+                        score++;
+                        lives--; // Decrease lives when player collides with target
+                    }
+
                     Place_Target(i, target_x, target_y, target_type, target_hp, target_last_fire_tick,
                                  player_x, player_y, &difficulty);
-
-                    score++;
-                    lives--; // Decrease lives when player collides with target
                 }
 
                 // Check if any active bullets overlap with target
+                if (Is_Target_Item(target_type[i])) continue;
+
                 for (uint8_t b = 0; b < MAX_BULLETS; b++)
                 {
                     if (!bullet_active[b]) continue;
@@ -649,7 +797,7 @@ MenuState Game1_Run(void)
                                         target_x[i], target_y[i], target_radius))
                     {
                         // When the bullet collides with the enemy, Erase bullet
-                        LCD_Draw_Circle(target_x[i], target_y[i], target_radius, 0, 1);
+                        Draw_Target_Entity(target_x[i], target_y[i], target_type[i], 0);
                         LCD_Draw_Circle(bullet_x[b], (uint16_t)bullet_y[b], BULLET_RADIUS, 0, 1);
                         bullet_active[b] = 0;
 
@@ -663,7 +811,7 @@ MenuState Game1_Run(void)
                         }
                         else
                         {
-                            LCD_Draw_Circle(target_x[i], target_y[i], target_radius, Get_Target_Color(target_type[i]), 1);
+                            Draw_Target_Entity(target_x[i], target_y[i], target_type[i], Get_Target_Color(target_type[i]));
                         }
 
                         break;
@@ -733,11 +881,15 @@ MenuState Game1_Run(void)
             }
             // Exit game loop when player has no lives left
             if (lives <= 0)
-            {
+            {   
                 // Game over
+                char score_str[64];
+                sprintf(score_str, "Score: %2d  HP: %2d", score, lives);
+
                 buzzer_note(&buzzer_cfg, NOTE_A4, 60);
                 LCD_Fill_Buffer(0);
                 LCD_printString("GAME OVER", 40, 120, 15, 3);
+                LCD_printString(score_str, 20, 145, 1, 2);
                 LCD_Refresh(&cfg0);
                 HAL_Delay(2000);
                 buzzer_off(&buzzer_cfg);

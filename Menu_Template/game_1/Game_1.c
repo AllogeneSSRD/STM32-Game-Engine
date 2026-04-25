@@ -242,6 +242,14 @@ MenuState Game1_Run(void)
         LCD_Draw_Rect(0, 0, LCD_WIDTH, 25, 0, 1);
         LCD_printString(score_str, 10, 0, 1, 2);
 
+        // Initialize button hold tracking for returning to submenu
+        uint32_t btn3_press_start_ms = 0;   // 按下开始时间
+        uint32_t btn3_hold_ms = 0;          // 已按住的时间
+        char btn_hold_str[64];
+
+        LCD_Draw_Rect(0, LCD_HEIGHT - 20, LCD_WIDTH, 20, 0, 1);
+        LCD_printString("Hold BT3 to return", 10, 220, 1, 1);
+
 
         // Game loop
         while (1) 
@@ -250,6 +258,35 @@ MenuState Game1_Run(void)
 
             // Read input
             Input_Read();
+
+            // 按下瞬间 -> 记录起始时间
+            if (current_input.btn3_pressed) btn3_press_start_ms = frame_start;
+            // 如果已经开始计时
+            if (btn3_press_start_ms != 0) 
+            {
+                // Read GPIO 是否仍然按住
+                if (HAL_GPIO_ReadPin(BTN3_GPIO_Port, BTN3_Pin) == GPIO_PIN_RESET)
+                {
+                    btn3_hold_ms = frame_start - btn3_press_start_ms;
+                    sprintf(btn_hold_str,
+                            "Hold BT3: %lu / %u ms",
+                            btn3_hold_ms, BTN3_HOLD_MS);
+
+                    LCD_Draw_Rect(0, LCD_HEIGHT - 20, LCD_WIDTH, 20, 0, 1);
+                    LCD_printString(btn_hold_str, 10, 220, 1, 1);
+
+                    if (btn3_hold_ms >= BTN3_HOLD_MS) {
+                        break;
+                    }
+                }
+                else // 松手 -> 清零
+                {
+                    btn3_press_start_ms = 0;
+                    btn3_hold_ms = 0;
+                    LCD_Draw_Rect(0, LCD_HEIGHT - 20, LCD_WIDTH, 20, 0, 1);
+                    // LCD_printString("Hold BT3 to return", 10, 220, 1, 1);
+                }
+            }
 
             // ===== STEP 1: Read Joystick Input =====
             Joystick_Read(&joystick_cfg, &joystick_data);

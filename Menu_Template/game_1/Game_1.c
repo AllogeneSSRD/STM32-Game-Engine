@@ -44,7 +44,7 @@ extern InputState current_input;
 // Player parameters 
 #define PLAYER_RADIUS 6
 #define PLAYER_COLOR 2
-#define PLAYER_LIVES 1
+#define PLAYER_HP 10
 // Player Movement parameters
 #define MOVE_SPEED 2      // Pixels to move per update
 #define MOVE_DELAY_MS 30  // Milliseconds between movement updates
@@ -54,13 +54,30 @@ extern InputState current_input;
 #define TARGET_COLOR 6
 #define TARGET_COUNT 5
 #define TARGET_FALL_SPEED 1
-#define TARGET_MOVE_DELAY_MS 50
+#define TARGET_MOVE_DELAY_MS 66
+
+#define TARGET_ADVANCED_RADIUS 6
+#define TARGET_ADVANCED_COLOR 5
+#define TARGET_ADVANCED_HP 3
+
+#define TARGET_BOSS_RADIUS 9
+#define TARGET_BOSS_COLOR 1
+#define TARGET_BOSS_HP 8
+
+#define TARGET_SCORE_NORMAL 1
+#define TARGET_SCORE_ADVANCED 5
+#define TARGET_SCORE_BOSS 20
 
 // Bullet parameters
 #define BULLET_RADIUS 2
 #define BULLET_SPEED 3
 #define BULLET_FIRE_INTERVAL_MS 300
 #define MAX_BULLETS 32
+
+#define MAX_ENEMY_BULLETS 8
+#define ENEMY_BULLET_RADIUS 2
+#define ENEMY_BULLET_SPEED 2
+#define ENEMY_BULLET_COLOR 7
 
 #define EASY_WIN_SCORE 30
 #define HARD_WIN_SCORE 100
@@ -80,8 +97,17 @@ typedef struct {
     uint8_t target_fall_speed;
     uint16_t target_move_delay_ms;
     uint16_t bullet_fire_interval_ms;
+    uint16_t boss_fire_interval_ms;
+    uint8_t advanced_spawn_chance;
+    uint8_t boss_spawn_chance;
     uint16_t win_score; // 0 means endless mode
 } GameDifficulty;
+
+typedef enum {
+    TARGET_TYPE_NORMAL = 0,
+    TARGET_TYPE_ADVANCED,
+    TARGET_TYPE_BOSS
+} TargetType;
 
 uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
                         uint16_t x2, uint16_t y2, uint16_t r2);
@@ -89,10 +115,19 @@ uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
 void Place_Target(uint8_t index,
                   uint16_t *target_x,
                   uint16_t *target_y,
+                  TargetType *target_type,
+                  int16_t *target_hp,
+                  uint32_t *target_last_fire_tick,
                   uint16_t player_x,
-                  uint16_t player_y);
+                  uint16_t player_y,
+                  const GameDifficulty *difficulty);
 
 static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode);
+static TargetType Pick_Target_Type(const GameDifficulty *difficulty);
+static uint8_t Get_Target_Radius(TargetType type);
+static uint8_t Get_Target_Color(TargetType type);
+static int16_t Get_Target_Initial_HP(TargetType type);
+static uint16_t Get_Target_Kill_Score(TargetType type);
 
 // ===== Game Function Implementations =====
 
@@ -114,6 +149,9 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.target_fall_speed = 2;
         cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
         cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
+        cfg.boss_fire_interval_ms = 700;
+        cfg.advanced_spawn_chance = 35;
+        cfg.boss_spawn_chance = 12;
         cfg.win_score = HARD_WIN_SCORE;
     }
     else if (selected_mode == SUBMENU_1_STATE_3)
@@ -122,6 +160,9 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.target_fall_speed = TARGET_FALL_SPEED;
         cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
         cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
+        cfg.boss_fire_interval_ms = 850;
+        cfg.advanced_spawn_chance = 30;
+        cfg.boss_spawn_chance = 10;
         cfg.win_score = 0;
     }
     else
@@ -130,10 +171,52 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.target_fall_speed = TARGET_FALL_SPEED;
         cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
         cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
+        cfg.boss_fire_interval_ms = 1200;
+        cfg.advanced_spawn_chance = 20;
+        cfg.boss_spawn_chance = 5;
         cfg.win_score = EASY_WIN_SCORE;
     }
 
     return cfg;
+}
+
+static TargetType Pick_Target_Type(const GameDifficulty *difficulty)
+{
+    uint16_t r = Random_U16(100);
+    if (r < difficulty->boss_spawn_chance)
+        return TARGET_TYPE_BOSS;
+    if (r < (uint16_t)(difficulty->boss_spawn_chance + difficulty->advanced_spawn_chance))
+        return TARGET_TYPE_ADVANCED;
+    else                                
+        return TARGET_TYPE_NORMAL;
+}
+
+static uint8_t Get_Target_Radius(TargetType type)
+{
+    if (type == TARGET_TYPE_ADVANCED)   return TARGET_ADVANCED_RADIUS;
+    if (type == TARGET_TYPE_BOSS)       return TARGET_BOSS_RADIUS;
+    else                                return TARGET_RADIUS;
+}
+
+static uint8_t Get_Target_Color(TargetType type)
+{
+    if (type == TARGET_TYPE_ADVANCED)   return TARGET_ADVANCED_COLOR;
+    if (type == TARGET_TYPE_BOSS)       return TARGET_BOSS_COLOR;
+    else                                return TARGET_COLOR;
+}
+
+static int16_t Get_Target_Initial_HP(TargetType type)
+{
+    if (type == TARGET_TYPE_ADVANCED)   return TARGET_ADVANCED_HP;
+    if (type == TARGET_TYPE_BOSS)       return TARGET_BOSS_HP;
+    else                                return 1;
+}
+
+static uint16_t Get_Target_Kill_Score(TargetType type)
+{
+    if (type == TARGET_TYPE_ADVANCED)   return TARGET_SCORE_ADVANCED;
+    if (type == TARGET_TYPE_BOSS)       return TARGET_SCORE_BOSS;
+    else                                return TARGET_SCORE_NORMAL;
 }
 
 // Reference: Unit 3.2 Joystick
@@ -185,51 +268,60 @@ uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
 void Place_Target(uint8_t index,
                   uint16_t *target_x,
                   uint16_t *target_y,
+                  TargetType *target_type,
+                  int16_t *target_hp,
+                  uint32_t *target_last_fire_tick,
                   uint16_t player_x,
-                  uint16_t player_y)
+                  uint16_t player_y,
+                  const GameDifficulty *difficulty)
 {
-  uint8_t tries = 0;
-  const uint16_t min_spacing = (PLAYER_RADIUS + TARGET_RADIUS) * 2;  // Minimum distance from player/targets
-  const uint16_t top_spawn_y = PLAY_AREA_Y0 + TARGET_RADIUS;
+    uint8_t tries = 0;
+    TargetType picked_type = Pick_Target_Type(difficulty);
+    uint8_t spawn_radius = Get_Target_Radius(picked_type);
+    uint8_t spawn_color = Get_Target_Color(picked_type);
+    const uint16_t min_spacing = (PLAYER_RADIUS + TARGET_BOSS_RADIUS);
+    const uint16_t top_spawn_y = PLAY_AREA_Y0 + spawn_radius;
 
-  while (tries < 100)
-  {
-    // Generate random position within play area, with margins for the target radius
-    uint16_t x = Random_U16(LCD_WIDTH - 2 * TARGET_RADIUS) + TARGET_RADIUS;
-    uint16_t y = top_spawn_y;
-
-    // Check collision with player
-    uint8_t collision = Circles_Overlap(x, y, min_spacing / 2, player_x, player_y, PLAYER_RADIUS);
-    
-    // Check collision with other targets
-    if (!collision)
+    while (tries < 100)
     {
-      for (uint8_t i = 0; i < TARGET_COUNT; i++)
-      {
-        if (i == index)
+        // Generate random position within play area, with margins for the target radius
+        uint16_t x = Random_U16(LCD_WIDTH - 2 * spawn_radius) + spawn_radius;
+        uint16_t y = top_spawn_y;
+
+        // Check collision with player
+        uint8_t collision = Circles_Overlap(x, y, min_spacing / 2, player_x, player_y, PLAYER_RADIUS);
+        
+        // Check collision with other targets
+        if (!collision)
         {
-          continue;
+            for (uint8_t i = 0; i < TARGET_COUNT; i++)
+            {
+                if (i == index) continue;
+                if (target_y[i] != 0 &&
+                    Circles_Overlap(x, y, spawn_radius, 
+                                    target_x[i], target_y[i], 
+                                    Get_Target_Radius(target_type[i])))
+                {
+                    collision = 1;
+                    break;
+                }
+            }
         }
 
-        if (Circles_Overlap(x, y, TARGET_RADIUS, target_x[i], target_y[i], TARGET_RADIUS))
+        if (!collision)
         {
-          collision = 1;
-          break;
+            target_x[index] = x;
+            target_y[index] = y;
+            target_type[index] = picked_type;
+            target_hp[index] = Get_Target_Initial_HP(picked_type);
+            target_last_fire_tick[index] = HAL_GetTick();
+
+            LCD_Draw_Circle(x, y, spawn_radius, spawn_color, 1);
+            return;
         }
-      }
+
+        tries++;
     }
-
-    if (!collision)
-    {
-      target_x[index] = x;
-      target_y[index] = y;
-
-      LCD_Draw_Circle(x, y, TARGET_RADIUS, TARGET_COLOR, 1);
-      return;
-    }
-
-    tries++;
-  }
 }
 
 
@@ -274,10 +366,14 @@ MenuState Game1_Run(void)
         // Initial targets
         uint16_t target_x[TARGET_COUNT] = {0};
         uint16_t target_y[TARGET_COUNT] = {0};
+        TargetType target_type[TARGET_COUNT] = {TARGET_TYPE_NORMAL};
+        int16_t target_hp[TARGET_COUNT] = {0};
+        uint32_t target_last_fire_tick[TARGET_COUNT] = {0};
         uint32_t last_target_move_tick = HAL_GetTick();
         for (uint8_t i = 0; i < TARGET_COUNT; i++)
         {
-            Place_Target(i, target_x, target_y, player_x, player_y);
+            Place_Target(i, target_x, target_y, target_type, target_hp, target_last_fire_tick,
+                         player_x, player_y, &difficulty);
         }
 
         // Initialize bullet
@@ -286,9 +382,14 @@ MenuState Game1_Run(void)
         uint8_t bullet_active[MAX_BULLETS] = {0};
         uint32_t last_bullet_move_tick = HAL_GetTick();
 
+        // Initialize boss bullets
+        uint16_t enemy_bullet_x[MAX_ENEMY_BULLETS] = {0};
+        int16_t enemy_bullet_y[MAX_ENEMY_BULLETS] = {0};
+        uint8_t enemy_bullet_active[MAX_ENEMY_BULLETS] = {0};
+
         // Initialize score & life
         uint16_t score = 0;
-        int16_t lives = PLAYER_LIVES;
+        int16_t lives = PLAYER_HP;
         char hud_str[64];
         if (difficulty.win_score > 0)
         {
@@ -454,19 +555,67 @@ MenuState Game1_Run(void)
             {
                 for (uint8_t i = 0; i < TARGET_COUNT; i++)
                 {
-                    LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 0, 1);
+                    uint8_t radius = Get_Target_Radius(target_type[i]);
+                    uint8_t color = Get_Target_Color(target_type[i]);
+
+                    LCD_Draw_Circle(target_x[i], target_y[i], radius, 0, 1);
 
                     uint16_t new_target_y = target_y[i] + difficulty.target_fall_speed;
-                    if (new_target_y >= (LCD_HEIGHT - TARGET_RADIUS))
+                    if (new_target_y >= (LCD_HEIGHT - radius))
                     {
-                        Place_Target(i, target_x, target_y, player_x, player_y);
+                        Place_Target(i, target_x, target_y, target_type, target_hp, target_last_fire_tick,
+                                     player_x, player_y, &difficulty);
                         continue;
                     }
+
                     target_y[i] = new_target_y;
-                    LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 6, 1);
+                    LCD_Draw_Circle(target_x[i], target_y[i], radius, color, 1);
+
+                    // Boss bullet spawn
+                    if (target_type[i] == TARGET_TYPE_BOSS &&
+                        (frame_start - target_last_fire_tick[i]) >= difficulty.boss_fire_interval_ms)
+                    {
+                        for (uint8_t j = 0; j < MAX_ENEMY_BULLETS; j++)
+                        {
+                            if (!enemy_bullet_active[j])
+                            {
+                                enemy_bullet_x[j] = target_x[i];
+                                enemy_bullet_y[j] = (int16_t)target_y[i] + radius + ENEMY_BULLET_RADIUS;
+                                enemy_bullet_active[j] = 1;
+                                target_last_fire_tick[i] = frame_start;
+                                break;
+                            }
+                        }
+                    }
                 }
 
             last_target_move_tick = frame_start;
+            }
+
+            // Boss bullet movement and collision (same hit behavior: touch player costs life)
+            for (uint8_t k = 0; k < MAX_ENEMY_BULLETS; k++)
+            {
+                if (!enemy_bullet_active[k]) continue;
+
+                LCD_Draw_Circle(enemy_bullet_x[k], (uint16_t)enemy_bullet_y[k], ENEMY_BULLET_RADIUS, 0, 1);
+                enemy_bullet_y[k] += ENEMY_BULLET_SPEED;
+
+                if (enemy_bullet_y[k] >= (LCD_HEIGHT - ENEMY_BULLET_RADIUS))
+                {
+                    enemy_bullet_active[k] = 0;
+                    continue;
+                }
+
+                if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS,
+                                    enemy_bullet_x[k], (uint16_t)enemy_bullet_y[k], ENEMY_BULLET_RADIUS))
+                {
+                    enemy_bullet_active[k] = 0;
+                    lives--;
+                    continue;
+                }
+
+                LCD_Draw_Circle(enemy_bullet_x[k], (uint16_t)enemy_bullet_y[k], 
+                            ENEMY_BULLET_RADIUS, ENEMY_BULLET_COLOR, 1);
             }
 
             // ===== STEP -2: Collision Detection =====
@@ -476,13 +625,16 @@ MenuState Game1_Run(void)
             // 当两个圆心之间的距离小于半径之和时，这两个圆会发生碰撞。            
             for (uint8_t i = 0; i < TARGET_COUNT; i++)
             {
+                uint8_t target_radius = Get_Target_Radius(target_type[i]);
+
                 // Check if player circle overlaps with target
                 if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS, 
-                                    target_x[i], target_y[i], TARGET_RADIUS))
+                                    target_x[i], target_y[i], target_radius))
                 {
                     // When the player collides with the enemy, Erase enemy
-                    LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 0, 1);
-                    Place_Target(i, target_x, target_y, player_x, player_y);
+                    LCD_Draw_Circle(target_x[i], target_y[i], target_radius, 0, 1);
+                    Place_Target(i, target_x, target_y, target_type, target_hp, target_last_fire_tick,
+                                 player_x, player_y, &difficulty);
 
                     score++;
                     lives--; // Decrease lives when player collides with target
@@ -494,15 +646,26 @@ MenuState Game1_Run(void)
                     if (!bullet_active[b]) continue;
 
                     if (Circles_Overlap(bullet_x[b], bullet_y[b], BULLET_RADIUS,
-                                        target_x[i], target_y[i], TARGET_RADIUS))
+                                        target_x[i], target_y[i], target_radius))
                     {
                         // When the bullet collides with the enemy, Erase bullet
-                        LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 0, 1);
-                        LCD_Draw_Circle(bullet_x[b], bullet_y[b], BULLET_RADIUS, 0, 1);
+                        LCD_Draw_Circle(target_x[i], target_y[i], target_radius, 0, 1);
+                        LCD_Draw_Circle(bullet_x[b], (uint16_t)bullet_y[b], BULLET_RADIUS, 0, 1);
                         bullet_active[b] = 0;
-                        score++;
 
-                        Place_Target(i, target_x, target_y, player_x, player_y);
+                        target_hp[i]--;
+
+                        if (target_hp[i] <= 0)
+                        {
+                            score += Get_Target_Kill_Score(target_type[i]);
+                            Place_Target(i, target_x, target_y, target_type, target_hp, target_last_fire_tick,
+                                         player_x, player_y, &difficulty);
+                        }
+                        else
+                        {
+                            LCD_Draw_Circle(target_x[i], target_y[i], target_radius, Get_Target_Color(target_type[i]), 1);
+                        }
+
                         break;
                     }
                 }

@@ -100,7 +100,7 @@ static uint8_t Random_Car(void)
 
 
 //Draw lanes
-void Draw_Map(void)
+void Draw_Game2_Map(void)
 {
     int road_width;
     int lane_width;
@@ -307,7 +307,7 @@ static void Reward_Update(void)
 
 MenuState Game2_Run(void) {
     // Initialize game state
-
+    int win = 0;
     remaining_lives = 3;
     score = 0;
 
@@ -419,14 +419,16 @@ MenuState Game2_Run(void) {
 
             if (score >= WIN_SCORE)
             {
+                win = 1;
                 exit_state = MENU_STATE_HOME;
-                break;                
+                break;
             }
 
 
             //Game over
             if(remaining_lives == 0)
             {   
+                win = 0;
                 exit_state = MENU_STATE_HOME;
                 break;
             }
@@ -435,7 +437,7 @@ MenuState Game2_Run(void) {
         LCD_Fill_Buffer(0);
         Reward_Update();
 
-        Draw_Map();
+        Draw_Game2_Map();
 
         Draw_Player();
 
@@ -468,39 +470,42 @@ MenuState Game2_Run(void) {
     }
     
 // Victory celebration
-for (int i = 0; i < 6; i++)
+if (win)
 {
-    LCD_Fill_Buffer(0);
-    LCD_printString("YOU WIN!", 50, 100, 1, 3);
-    LCD_printString("SCORE 200+", 40, 140, 1, 2);
-    LCD_Refresh(&cfg0);
+    for (int i = 0; i < 6; i++)
+    {
+        LCD_Fill_Buffer(0);
+        LCD_printString("YOU WIN!", 50, 100, 1, 3);
+        LCD_printString("SCORE 200+", 40, 140, 1, 2);
+        LCD_Refresh(&cfg0);
 
-    buzzer_tone(&buzzer_cfg, 1500, 40);
-    HAL_Delay(200);
-    buzzer_off(&buzzer_cfg);
+        buzzer_tone(&buzzer_cfg, 1500, 40);
+        HAL_Delay(200);
+        buzzer_off(&buzzer_cfg);
 
-    HAL_Delay(200);
+        HAL_Delay(200);
+    }
 }
 
     //Game over
     // Play game over sounds and lights
+    if (!win)
+{
     buzzer_note(&buzzer_cfg, NOTE_A4, 60);
     HAL_Delay(1000);
     buzzer_off(&buzzer_cfg);
-    PWM_SetDuty(&pwm_cfg, 0);               
 
-    // Output game over message
+    for (int i = 0; i < 4; i++)
+    {
+        LCD_Fill_Buffer(0);
+        LCD_printString("GAME OVER!!!", 40, 120, 1, 3);
+        LCD_Refresh(&cfg0);
+        HAL_Delay(300);
 
-for (int i = 0; i < 4; i++)
-{
-    LCD_Fill_Buffer(0);
-    LCD_printString("GAME OVER!!!", 40, 120, 1, 3);
-    LCD_Refresh(&cfg0);
-    HAL_Delay(300);
-
-    LCD_Fill_Buffer(0);
-    LCD_Refresh(&cfg0);
-    HAL_Delay(300);
+        LCD_Fill_Buffer(0);
+        LCD_Refresh(&cfg0);
+        HAL_Delay(300);
+    }
 }
 
     LCD_Fill_Buffer(0);

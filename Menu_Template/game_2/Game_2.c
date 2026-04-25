@@ -44,7 +44,7 @@ static int road_offset = 0;
 #define ENEMY_SPACING 68   //Minimum distance between enemy vehicles
 #define REWARD_SCORE_GAIN   5
 #define REWARD_SCORE_LOSS   3
-#define WIN_SCORE 200
+#define WIN_SCORE 20
 
 // number of lanes
 static int num_lanes = 3;
@@ -432,7 +432,7 @@ MenuState Game2_Run(void) {
                 exit_state = MENU_STATE_HOME;
                 break;
             }
-
+           
         // RENDER: Draw to LCD
         LCD_Fill_Buffer(0);
         Reward_Update();
@@ -465,10 +465,12 @@ MenuState Game2_Run(void) {
             HAL_Delay(GAME2_FRAME_TIME_MS - frame_time);
         }
     }
-    // Game's own loop - runs until exit condition
-    
+  
+     if (win || remaining_lives == 0)
+            break;
     }
-    
+     
+           
 // Victory celebration
 if (win)
 {

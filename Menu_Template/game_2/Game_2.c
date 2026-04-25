@@ -45,7 +45,11 @@ static int road_offset = 0;
 #define REWARD_SCORE_GAIN   5
 #define REWARD_SCORE_LOSS   3
 #define WIN_SCORE 25
+#define BTN3_HOLD_EXIT_MS   3000
 
+
+static uint32_t btn3_press_start_ms = 0;
+static uint32_t btn3_hold_ms = 0;
 // number of lanes
 static int num_lanes = 3;
 // The X-coordinate of each lane
@@ -308,6 +312,7 @@ static void Reward_Update(void)
 MenuState Game2_Run(void) {
     // Initialize game state
     int win = 0;
+    int game_playing = 0; 
     remaining_lives = 3;
     score = 0;
 
@@ -348,6 +353,7 @@ MenuState Game2_Run(void) {
 
     while(remaining_lives > 0)
     {
+        game_playing = 1;
         //Reset player position
         Initialize_Player_Center();
         
@@ -366,12 +372,49 @@ MenuState Game2_Run(void) {
             Input_Read();
         
             // Check if button was pressed to return to menu
-            if (current_input.btn3_pressed) 
+            
+            if (current_input.btn3_pressed && !game_playing)
             {
                 exit_state = MENU_STATE_HOME;
-                break;  // Exit game loop
+                break;
             }
-        
+
+            
+
+
+
+uint32_t now = frame_start;
+
+if (game_playing &&
+    HAL_GPIO_ReadPin(BTN3_GPIO_Port, BTN3_Pin) == GPIO_PIN_SET)
+{
+    if (btn3_press_start_ms == 0)
+    {
+        btn3_press_start_ms = now;   // 第一次按下
+    }
+
+    btn3_hold_ms = now - btn3_press_start_ms;
+
+    char hold_str[32];
+    sprintf(hold_str, "Hold BT3: %lu / %u ms",
+            btn3_hold_ms, BTN3_HOLD_EXIT_MS);
+    LCD_Draw_Rect(0, ROAD_BOTTOM + 5, 240, 20, 0, 1);
+    LCD_printString(hold_str, 20, ROAD_BOTTOM + 8, 1, 1);
+
+    if (btn3_hold_ms >= BTN3_HOLD_EXIT_MS)
+    {
+        game_playing = 0;
+        exit_state = MENU_STATE_HOME;
+        break;
+    }
+}
+else
+{
+    // ✅ 只有“真的松手”才清零
+    btn3_press_start_ms = 0;
+    btn3_hold_ms = 0;
+}
+
             //Overtaking bonus points
 
             for (int i = 0; i < enemy_count; i++)

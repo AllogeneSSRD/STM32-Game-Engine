@@ -53,11 +53,13 @@ extern InputState current_input;
 #define TARGET_RADIUS 4
 #define TARGET_COLOR 6
 #define TARGET_COUNT 5
+#define TARGET_FALL_SPEED 1
+#define TARGET_MOVE_DELAY_MS 50
 
 // Bullet parameters
 #define BULLET_RADIUS 2
-#define BULLET_SPEED 2
-#define BULLET_FIRE_INTERVAL_MS 500
+#define BULLET_SPEED 3
+#define BULLET_FIRE_INTERVAL_MS 300
 #define MAX_BULLETS 32
 
 #define BTN3_HOLD_MS 1500
@@ -142,12 +144,13 @@ void Place_Target(uint8_t index,
 {
   uint8_t tries = 0;
   const uint16_t min_spacing = (PLAYER_RADIUS + TARGET_RADIUS) * 2;  // Minimum distance from player/targets
+  const uint16_t top_spawn_y = PLAY_AREA_Y0 + TARGET_RADIUS;
 
   while (tries < 100)
   {
     // Generate random position within play area, with margins for the target radius
     uint16_t x = Random_U16(LCD_WIDTH - 2 * TARGET_RADIUS) + TARGET_RADIUS;
-    uint16_t y = Random_U16(LCD_HEIGHT - PLAY_AREA_Y0 - 2 * TARGET_RADIUS) + PLAY_AREA_Y0 + TARGET_RADIUS;
+    uint16_t y = top_spawn_y;
 
     // Check collision with player
     uint8_t collision = Circles_Overlap(x, y, min_spacing / 2, player_x, player_y, PLAYER_RADIUS);
@@ -214,30 +217,26 @@ MenuState Game1_Run(void)
         // Initialize player at center of screen
         uint16_t player_x = LCD_WIDTH / 2;
         uint16_t player_y = LCD_HEIGHT / 2;
-
+        uint16_t prev_player_x = player_x;
+        uint16_t prev_player_y = player_y;
+        uint32_t last_move_tick = HAL_GetTick();
         // Draw player
         LCD_Draw_Circle(player_x, player_y, PLAYER_RADIUS, PLAYER_COLOR, 1);
-        LCD_Refresh(&cfg0);
-
-        // Arrays to store target positions
-        uint16_t target_x[TARGET_COUNT] = {0};
-        uint16_t target_y[TARGET_COUNT] = {0};
 
         // Initial targets
+        uint16_t target_x[TARGET_COUNT] = {0};
+        uint16_t target_y[TARGET_COUNT] = {0};
+        uint32_t last_target_move_tick = HAL_GetTick();
         for (uint8_t i = 0; i < TARGET_COUNT; i++)
         {
             Place_Target(i, target_x, target_y, player_x, player_y);
         }
 
-        // Initialize variables for game state
-        uint32_t last_move_tick = HAL_GetTick();
-        uint16_t prev_player_x = player_x;
-        uint16_t prev_player_y = player_y;
-
+        // Initialize bullet
         uint16_t bullet_x[MAX_BULLETS] = {0};
         int16_t bullet_y[MAX_BULLETS] = {0};
         uint8_t bullet_active[MAX_BULLETS] = {0};
-        uint32_t last_bullet_tick = HAL_GetTick();
+        uint32_t last_bullet_move_tick = HAL_GetTick();
 
         // Initialize score & life
         uint16_t score = 0;
@@ -255,6 +254,7 @@ MenuState Game1_Run(void)
         LCD_Draw_Rect(0, LCD_HEIGHT - 20, LCD_WIDTH, 20, 0, 1);
         LCD_printString("Hold BT3 to return", 10, 220, 1, 1);
 
+        LCD_Refresh(&cfg0);
 
         // Game loop
         while (1) 
@@ -359,7 +359,7 @@ MenuState Game1_Run(void)
             // ===== STEP 4: Bullet Create and Movement =====
             // Update - fire
             bool fired = false;
-            if ((frame_start - last_bullet_tick) >= BULLET_FIRE_INTERVAL_MS)
+            if ((frame_start - last_bullet_move_tick) >= BULLET_FIRE_INTERVAL_MS)
             {
                 for (uint8_t i = 0; i < MAX_BULLETS; i++)
                 {
@@ -372,7 +372,7 @@ MenuState Game1_Run(void)
                         break;
                     }
                 }
-                if (fired) last_bullet_tick = frame_start;
+                if (fired) last_bullet_move_tick = frame_start;
             }
 
             // Update - move
@@ -394,7 +394,27 @@ MenuState Game1_Run(void)
                 }
             }
 
-            // ===== STEP 5: Collision Detection =====
+            // ===== STEP 5: Target Falling Movement =====
+            if ((frame_start - last_target_move_tick) >= TARGET_MOVE_DELAY_MS)
+            {
+                for (uint8_t i = 0; i < TARGET_COUNT; i++)
+                {
+                    LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 0, 1);
+
+                    uint16_t new_target_y = target_y[i] + TARGET_FALL_SPEED;
+                    if (new_target_y >= (LCD_HEIGHT - TARGET_RADIUS))
+                    {
+                        Place_Target(i, target_x, target_y, player_x, player_y);
+                        continue;
+                    }
+                    target_y[i] = new_target_y;
+                    LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 6, 1);
+                }
+
+            last_target_move_tick = frame_start;
+            }
+
+            // ===== STEP -2: Collision Detection =====
             // Circle overlap collision: check if circles touch or overlap
             // Two circles collide when distance between centers < sum of radii
             // 圆重叠碰撞检测：检查圆是否接触或重叠

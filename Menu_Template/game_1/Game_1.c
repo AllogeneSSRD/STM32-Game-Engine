@@ -62,6 +62,9 @@ extern InputState current_input;
 #define BULLET_FIRE_INTERVAL_MS 300
 #define MAX_BULLETS 32
 
+#define EASY_WIN_SCORE 30
+#define HARD_WIN_SCORE 100
+
 #define BTN3_HOLD_MS 1500
 
 
@@ -72,6 +75,14 @@ extern InputState current_input;
 // };
 
 // ===== Game Function Prototypes =====
+typedef struct {
+    const char* mode_name;
+    uint8_t target_fall_speed;
+    uint16_t target_move_delay_ms;
+    uint16_t bullet_fire_interval_ms;
+    uint16_t win_score; // 0 means endless mode
+} GameDifficulty;
+
 uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
                         uint16_t x2, uint16_t y2, uint16_t r2);
 
@@ -81,6 +92,8 @@ void Place_Target(uint8_t index,
                   uint16_t player_x,
                   uint16_t player_y);
 
+static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode);
+
 // ===== Game Function Implementations =====
 
 static uint16_t Random_U16(uint16_t max)
@@ -88,6 +101,39 @@ static uint16_t Random_U16(uint16_t max)
   uint32_t rnd = 0;
   HAL_RNG_GenerateRandomNumber(&hrng, &rnd);
   return (uint16_t)(rnd % max);
+}
+
+static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
+{
+    GameDifficulty cfg;
+
+    if (selected_mode == SUBMENU_1_STATE_2)
+    {
+        // Hard: faster enemies and slightly slower player shooting
+        cfg.mode_name = "Hard";
+        cfg.target_fall_speed = 2;
+        cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
+        cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
+        cfg.win_score = HARD_WIN_SCORE;
+    }
+    else if (selected_mode == SUBMENU_1_STATE_3)
+    {
+        cfg.mode_name = "Infinite";
+        cfg.target_fall_speed = TARGET_FALL_SPEED;
+        cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
+        cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
+        cfg.win_score = 0;
+    }
+    else
+    {
+        cfg.mode_name = "Easy";
+        cfg.target_fall_speed = TARGET_FALL_SPEED;
+        cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
+        cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
+        cfg.win_score = EASY_WIN_SCORE;
+    }
+
+    return cfg;
 }
 
 // Reference: Unit 3.2 Joystick
@@ -196,8 +242,8 @@ MenuState Game1_Run(void)
 
     SubMenu_Init(&submenu);
 
-    // 外部循环：子菜单选择模式；游戏内BT3返回这里。
-    // 内部循环：运行实际游戏，直到BT3按下返回子菜单。
+    // 外部循环：子菜单选择模式；游戏内BT3返回这里 
+    // 内部循环：运行实际游戏，直到BT3按下返回子菜单
     // Outer loop: submenu selects mode; gameplay BT3 returns here.
     // Inner loop: runs the actual game until BT3 is pressed to return to submenu.
     while (1) {
@@ -205,6 +251,8 @@ MenuState Game1_Run(void)
         if (selected_mode == SUBMENU_1_STATE_HOME || selected_mode == SUBMENU_1_STATE_RETURN_MAIN) {
             return MENU_STATE_HOME;
         }
+
+        GameDifficulty difficulty = Get_Difficulty_From_Mode(selected_mode);
 
         // Play a brief startup sound
         buzzer_tone(&buzzer_cfg, 1000, 30);  // 1kHz at 30% volume
@@ -242,7 +290,14 @@ MenuState Game1_Run(void)
         uint16_t score = 0;
         int16_t lives = PLAYER_LIVES;
         char hud_str[64];
-        sprintf(hud_str, "Score: %2d Lives: %2d", score, lives);
+        if (difficulty.win_score > 0)
+        {
+            sprintf(hud_str, "%s  %2d/%3d  L:%2d", difficulty.mode_name, score, difficulty.win_score, lives);
+        }
+        else
+        {
+            sprintf(hud_str, "INF  %2d  L:%2d", score, lives);
+        }
         LCD_Draw_Rect(0, 0, LCD_WIDTH, 25, 0, 1);
         LCD_printString(hud_str, HUD_OFFSET_X, HUD_OFFSET_Y, 1, 2);
 
@@ -359,7 +414,7 @@ MenuState Game1_Run(void)
             // ===== STEP 4: Bullet Create and Movement =====
             // Update - fire
             bool fired = false;
-            if ((frame_start - last_bullet_move_tick) >= BULLET_FIRE_INTERVAL_MS)
+            if ((frame_start - last_bullet_move_tick) >= difficulty.bullet_fire_interval_ms)
             {
                 for (uint8_t i = 0; i < MAX_BULLETS; i++)
                 {
@@ -395,13 +450,13 @@ MenuState Game1_Run(void)
             }
 
             // ===== STEP 5: Target Falling Movement =====
-            if ((frame_start - last_target_move_tick) >= TARGET_MOVE_DELAY_MS)
+            if ((frame_start - last_target_move_tick) >= difficulty.target_move_delay_ms)
             {
                 for (uint8_t i = 0; i < TARGET_COUNT; i++)
                 {
                     LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 0, 1);
 
-                    uint16_t new_target_y = target_y[i] + TARGET_FALL_SPEED;
+                    uint16_t new_target_y = target_y[i] + difficulty.target_fall_speed;
                     if (new_target_y >= (LCD_HEIGHT - TARGET_RADIUS))
                     {
                         Place_Target(i, target_x, target_y, player_x, player_y);
@@ -452,7 +507,14 @@ MenuState Game1_Run(void)
                     }
                 }
             }                        
-            sprintf(hud_str, "Score: %2d Lives: %2d", score, lives);
+            if (difficulty.win_score > 0)
+            {
+                sprintf(hud_str, "%s  %2d/%3d  L:%2d", difficulty.mode_name, score, difficulty.win_score, lives);
+            }
+            else
+            {
+                sprintf(hud_str, "INF  %2d  L:%2d", score, lives);
+            }
             LCD_Draw_Rect(0, 0, LCD_WIDTH, 25, 0, 1);
             LCD_printString(hud_str, HUD_OFFSET_X, HUD_OFFSET_Y, 1, 2);
 
@@ -515,6 +577,24 @@ MenuState Game1_Run(void)
                 LCD_printString("GAME OVER", 40, 120, 15, 3);
                 LCD_Refresh(&cfg0);
                 HAL_Delay(2000);
+                buzzer_off(&buzzer_cfg);
+
+                LCD_Fill_Buffer(0);
+                LCD_printString("BACK TO MENU...", 20, 120, 1, 2);
+                LCD_Refresh(&cfg0);
+                HAL_Delay(1000);
+                break;
+            }
+
+            // For easy/hard mode: exit loop when reaching target score
+            if (difficulty.win_score > 0 && score >= difficulty.win_score)
+            {
+                buzzer_tone(&buzzer_cfg, 1500, 35);
+                LCD_Fill_Buffer(0);
+                LCD_printString("YOU WIN", 60, 110, 2, 3);
+                LCD_printString((char*)difficulty.mode_name, 70, 145, 1, 2);
+                LCD_Refresh(&cfg0);
+                HAL_Delay(3000);
                 buzzer_off(&buzzer_cfg);
 
                 LCD_Fill_Buffer(0);

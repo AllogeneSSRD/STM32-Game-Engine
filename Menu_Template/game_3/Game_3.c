@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "rng.h"
+#include "main.h"
 
 extern ST7789V2_cfg_t cfg0;
 extern PWM_cfg_t pwm_cfg;      // LED PWM control
@@ -173,12 +175,19 @@ void Draw_Player(void)
 static uint8_t ghost_dir[GHOSTS] = {1, 2, 3, 4};
 
 //Random number generater for generating random direction
-static uint8_t simple_rand(void)
+static uint8_t simple_rand(uint8_t max)
 {
-    static uint32_t n = 1;
-    n = n * 1664525 + 1013904223; // LCG: Linear Congruential Generator for random numbers
-    return (uint8_t)((n >> 24) % 4) + 1; //Use highest 8 digits due to better randomness, becomes 1-4 finally
+  uint32_t rnd = 0;
+  HAL_RNG_GenerateRandomNumber(&hrng, &rnd);
+  return (uint8_t)(rnd % max);
 }
+
+// static uint8_t simple_rand(void)
+// {
+//     static uint32_t n = 1;
+//     n = n * 1664525 + 1013904223; // LCG: Linear Congruential Generator for random numbers
+//     return (uint8_t)((n >> 24) % 4) + 1; //Use highest 8 digits due to better randomness, becomes 1-4 finally
+// }
 
 //Movement to Joystick direction
 void Movement_to_Joystick(Joystick_t *joystick_data)
@@ -300,7 +309,7 @@ void Move_Ghosts_One_Tile(void)
             case DIR_LEFT:  next_x--; break;
             case DIR_RIGHT: next_x++; break;
             default:
-                ghost_dir[i] = simple_rand(); //Invalid direction, randomizing again
+                ghost_dir[i] = simple_rand(4); //Invalid direction, randomizing again
                 continue;                     // Jump to next ghost, this time ghost won't move
         }
 
@@ -308,7 +317,7 @@ void Move_Ghosts_One_Tile(void)
         if (next_x < 0 || next_x >= MAP_COLS ||
             next_y < 0 || next_y >= MAP_ROWS)
         {
-            ghost_dir[i] = simple_rand(); 
+            ghost_dir[i] = simple_rand(4); 
             continue;
         }
 
@@ -320,7 +329,7 @@ void Move_Ghosts_One_Tile(void)
         }
         else
         {
-            ghost_dir[i] = simple_rand(); 
+            ghost_dir[i] = simple_rand(4); 
         }
     }
 }
@@ -373,7 +382,7 @@ MenuState Game3_Run(void)
     unsigned long score = 0; //Player's score starts at 0
 
     //Game starts
-    while (remaining_lives > 0) 
+    while (remaining_lives > 0 && exit_state != 16) //Exit the game loop to submenu if holding button 3, or when lives run out
     {
         //Reset player and ghost position
         Initialize_Player_Center();
@@ -382,7 +391,7 @@ MenuState Game3_Run(void)
 
         // Reset movement timers, preventing moving immediatetly
         pacman_last_move_tick = HAL_GetTick(); 
-        ghost_last_move_tick = HAL_GetTick();
+        ghost_last_move_tick = HAL_GetTick(); 
 
         //Each life loop
         while(1)

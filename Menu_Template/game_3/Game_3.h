@@ -45,6 +45,8 @@
 //Pacman movement delay
 #define PACMAN_MOVE_DELAY_MS 200 // Milliseconds between movement updates
 
+#define BTN3_HOLD_MS 2000
+
 // Initialize coordinate
 typedef struct {
     int16_t x;

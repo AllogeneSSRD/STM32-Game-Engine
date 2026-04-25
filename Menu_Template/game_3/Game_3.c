@@ -110,7 +110,7 @@ void Mapmatching(DifficultyState diffi)
     }
 }
 
-void Draw_Map(void)
+void Game3_Draw_Map(void)
 {
     //Clear the screen
     LCD_Fill_Buffer(0);
@@ -135,9 +135,13 @@ void Draw_Map(void)
         }
     }
 }
+
 //Calling coordinate structure
 static tile_pos pacman;
 static tile_pos ghosts[GHOSTS];
+
+//Calling pacman movement direction structure
+static PacmanDirection pacman_dir = DIR_NONE; //Initialize to none, staying still firstly
 
 //Initialize player at center of screen
 void Initialize_Player_Center(void)
@@ -147,17 +151,23 @@ void Initialize_Player_Center(void)
 }
 
 //Draw the player
-void Draw_Player(void)
+void Draw_Player(void) 
 {
-    //tile to pixel
-    int px = MAP_ORIGIN_X + pacman.x * TILE + TILE / 2;
-    int py = MAP_ORIGIN_Y + pacman.y * TILE + TILE / 2;
+    int px = MAP_ORIGIN_X + pacman.x * TILE + 1;
+    int py = MAP_ORIGIN_Y + pacman.y * TILE + 1;
 
-    LCD_Draw_Circle(px, py, 4, 5, 1);//Larger than dots
+    //Cover before drawing
+    LCD_Draw_Rect(px, py, SPR_SIZE, SPR_SIZE, 0, 1);
+
+    switch (pacman_dir) //The four directions correspond to four different mouth orientations
+    {
+        case DIR_LEFT:  LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_left);  break; 
+        case DIR_UP:    LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_right);    break;
+        case DIR_DOWN:  LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_left);  break;
+        case DIR_RIGHT: LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_right); break;
+        default: LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_right); break;
+    }
 }
-
-//Calling pacman movement direction structure
-static PacmanDirection pacman_dir = DIR_NONE; //Initialize to none, staying still firstly
 
 //Ghost movement direction, setting initial direction
 static uint8_t ghost_dir[GHOSTS] = {1, 2, 3, 4};
@@ -261,27 +271,17 @@ void Initialize_Ghosts(DifficultyState diffi)
 }
 
 //Draw Ghost
-void Draw_Ghosts(void)
-{
-    // Ghost 1
-    int px0 = MAP_ORIGIN_X + ghosts[0].x * TILE + TILE / 2;
-    int py0 = MAP_ORIGIN_Y + ghosts[0].y * TILE + TILE / 2;
-    LCD_Draw_Circle(px0, py0, 4, 2, 1);
+void Draw_Ghosts(void) {
+    const uint8_t *ghost_sprites[4] = {
+        ghost_red, ghost_green, ghost_blue, ghost_orange
+    };
 
-    // Ghost 2
-    int px1 = MAP_ORIGIN_X + ghosts[1].x * TILE + TILE / 2;
-    int py1 = MAP_ORIGIN_Y + ghosts[1].y * TILE + TILE / 2;
-    LCD_Draw_Circle(px1, py1, 4, 6, 1);
-
-    // Ghost 3
-    int px2 = MAP_ORIGIN_X + ghosts[2].x * TILE + TILE / 2;
-    int py2 = MAP_ORIGIN_Y + ghosts[2].y * TILE + TILE / 2;
-    LCD_Draw_Circle(px2, py2, 4, 4, 1);
-
-    // Ghost 4
-    int px3 = MAP_ORIGIN_X + ghosts[3].x * TILE + TILE / 2;
-    int py3 = MAP_ORIGIN_Y + ghosts[3].y * TILE + TILE / 2;
-    LCD_Draw_Circle(px3, py3, 4, 3, 1);
+    for (int i = 0; i < GHOSTS; i++) 
+    {
+        int gx = MAP_ORIGIN_X + ghosts[i].x * TILE + 1;
+        int gy = MAP_ORIGIN_Y + ghosts[i].y * TILE + 1;
+        LCD_Draw_Sprite(gx, gy, SPR_SIZE, SPR_SIZE, ghost_sprites[i]);
+    }
 }
 
 //Ghost Movement
@@ -409,7 +409,7 @@ MenuState Game3_Run(void)
 
             //Step 3. Draw the map and player
             //Draw Map
-            Draw_Map();
+            Game3_Draw_Map();
             //Draw the player at the center
             Draw_Player();
             //Draw ghosts at the corner
@@ -453,15 +453,16 @@ MenuState Game3_Run(void)
                     buzzer_off(&buzzer_cfg);
 
                     // LED flashing
-                    PWM_SetFreq(&pwm_cfg, 1000); //Reset frequency
-                    for (int j = 0; j < 10; j++)
+                    PWM_SetFreq(&pwm_cfg, 1000);
+                    for (int j = 0; j < 3; j++)
                     {
-                        PWM_SetDuty(&pwm_cfg, 5);  //Turn on
+                        PWM_SetDuty(&pwm_cfg, 100);   
                         HAL_Delay(120);
 
-                        PWM_SetDuty(&pwm_cfg, 100);   //Turn off
+                        PWM_SetDuty(&pwm_cfg, 5);     
                         HAL_Delay(120);
                     }
+                    PWM_SetDuty(&pwm_cfg, 0);
 
                     remaining_lives--;
                     is_life_lost = 1;

@@ -44,7 +44,7 @@ extern InputState current_input;
 // Player parameters 
 #define PLAYER_RADIUS 6
 #define PLAYER_COLOR 2
-#define PLAYER_LIVES 5
+#define PLAYER_LIVES 1
 // Player Movement parameters
 #define MOVE_SPEED 2      // Pixels to move per update
 #define MOVE_DELAY_MS 30  // Milliseconds between movement updates
@@ -505,6 +505,23 @@ MenuState Game1_Run(void)
             uint32_t frame_time = HAL_GetTick() - frame_start;
             if (frame_time < GAME1_FRAME_TIME_MS) {
                 HAL_Delay(GAME1_FRAME_TIME_MS - frame_time);
+            }
+            // Exit game loop when player has no lives left
+            if (lives <= 0)
+            {
+                // Game over
+                buzzer_note(&buzzer_cfg, NOTE_A4, 60);
+                LCD_Fill_Buffer(0);
+                LCD_printString("GAME OVER", 40, 120, 15, 3);
+                LCD_Refresh(&cfg0);
+                HAL_Delay(2000);
+                buzzer_off(&buzzer_cfg);
+
+                LCD_Fill_Buffer(0);
+                LCD_printString("BACK TO MENU...", 20, 120, 1, 2);
+                LCD_Refresh(&cfg0);
+                HAL_Delay(1000);
+                break;
             }
         }
     }

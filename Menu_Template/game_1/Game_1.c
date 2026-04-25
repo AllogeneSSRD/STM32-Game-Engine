@@ -38,10 +38,13 @@ extern InputState current_input;
 #define LCD_WIDTH 240
 #define LCD_HEIGHT 240
 #define PLAY_AREA_Y0 25  // Leave space at top for title
+#define HUD_OFFSET_X 5
+#define HUD_OFFSET_Y 5
 
 // Player parameters 
 #define PLAYER_RADIUS 6
 #define PLAYER_COLOR 2
+#define PLAYER_LIVES 5
 // Player Movement parameters
 #define MOVE_SPEED 2      // Pixels to move per update
 #define MOVE_DELAY_MS 30  // Milliseconds between movement updates
@@ -236,12 +239,13 @@ MenuState Game1_Run(void)
         uint8_t bullet_active[MAX_BULLETS] = {0};
         uint32_t last_bullet_tick = HAL_GetTick();
 
-        // Initialize score
+        // Initialize score & life
         uint16_t score = 0;
-        char score_str[16];
-        sprintf(score_str, "Score: %4d", score);
+        int16_t lives = PLAYER_LIVES;
+        char hud_str[64];
+        sprintf(hud_str, "Score: %2d Lives: %2d", score, lives);
         LCD_Draw_Rect(0, 0, LCD_WIDTH, 25, 0, 1);
-        LCD_printString(score_str, 10, 0, 1, 2);
+        LCD_printString(hud_str, HUD_OFFSET_X, HUD_OFFSET_Y, 1, 2);
 
         // Initialize button hold tracking for returning to submenu
         uint32_t btn3_press_start_ms = 0;   // 按下开始时间
@@ -364,7 +368,6 @@ MenuState Game1_Run(void)
                         bullet_x[i] = player_x;
                         bullet_y[i] = (int16_t)player_y - PLAYER_RADIUS - BULLET_RADIUS;
                         bullet_active[i] = 1;
-                        // LCD_Draw_Circle(bullet_x[i], (uint16_t)bullet_y[i], BULLET_RADIUS, 3, 1);
                         fired = true;
                         break;
                     }
@@ -390,6 +393,48 @@ MenuState Game1_Run(void)
                     LCD_Draw_Circle(bullet_x[i], (uint16_t)bullet_y[i], BULLET_RADIUS, 3, 1);
                 }
             }
+
+            // ===== STEP 5: Collision Detection =====
+            // Circle overlap collision: check if circles touch or overlap
+            // Two circles collide when distance between centers < sum of radii
+            // 圆重叠碰撞检测：检查圆是否接触或重叠
+            // 当两个圆心之间的距离小于半径之和时，这两个圆会发生碰撞。            
+            for (uint8_t i = 0; i < TARGET_COUNT; i++)
+            {
+                // Check if player circle overlaps with target
+                if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS, 
+                                    target_x[i], target_y[i], TARGET_RADIUS))
+                {
+                    // When the player collides with the enemy, Erase enemy
+                    LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 0, 1);
+                    Place_Target(i, target_x, target_y, player_x, player_y);
+
+                    score++;
+                    lives--; // Decrease lives when player collides with target
+                }
+
+                // Check if any active bullets overlap with target
+                for (uint8_t b = 0; b < MAX_BULLETS; b++)
+                {
+                    if (!bullet_active[b]) continue;
+
+                    if (Circles_Overlap(bullet_x[b], bullet_y[b], BULLET_RADIUS,
+                                        target_x[i], target_y[i], TARGET_RADIUS))
+                    {
+                        // When the bullet collides with the enemy, Erase bullet
+                        LCD_Draw_Circle(target_x[i], target_y[i], TARGET_RADIUS, 0, 1);
+                        LCD_Draw_Circle(bullet_x[b], bullet_y[b], BULLET_RADIUS, 0, 1);
+                        bullet_active[b] = 0;
+                        score++;
+
+                        Place_Target(i, target_x, target_y, player_x, player_y);
+                        break;
+                    }
+                }
+            }                        
+            sprintf(hud_str, "Score: %2d Lives: %2d", score, lives);
+            LCD_Draw_Rect(0, 0, LCD_WIDTH, 25, 0, 1);
+            LCD_printString(hud_str, HUD_OFFSET_X, HUD_OFFSET_Y, 1, 2);
 
 
             // ===== STEP -1: Update Display =====

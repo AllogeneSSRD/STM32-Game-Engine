@@ -2,6 +2,7 @@
 #define GAME_1_H
 
 #include "Menu.h"
+#include "SubMenu_1.h"
 
 /**
  * @brief Game 1 - Student can implement their own game here
@@ -15,6 +16,8 @@
  * 
  * @return MenuState - Where to go next (typically MENU_STATE_HOME for menu)
  */
+
+
 
 MenuState Game1_Run(void);
 

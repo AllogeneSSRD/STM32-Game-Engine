@@ -2,15 +2,23 @@
 #include "InputHandler.h"
 #include "Menu.h"
 #include "SubMenu_1.h"
+#include "Joystick.h"
 #include "LCD.h"
 #include "PWM.h"
 #include "Buzzer.h"
 #include "stm32l4xx_hal.h"
 #include <stdio.h>
+#include "rng.h"
+#include "tim.h"
+#include "main.h"
+
 
 extern ST7789V2_cfg_t cfg0;
 extern PWM_cfg_t pwm_cfg;      // LED PWM control
 extern Buzzer_cfg_t buzzer_cfg; // Buzzer control
+extern Joystick_cfg_t joystick_cfg; //Joystick control
+extern volatile uint32_t g_tim6_ticks;
+extern InputState current_input;
 
 /**
  * @brief Game 1 Implementation - Student can modify
@@ -20,23 +28,164 @@ extern Buzzer_cfg_t buzzer_cfg; // Buzzer control
  * Replace this with your actual game logic!
  */
 
-// Game state - customize for your game
-static uint32_t animation_counter = 0;
-static int16_t moving_x = 0;
-static int8_t move_direction = 1;
 
 // Frame rate for this game (in milliseconds)
 #define GAME1_FRAME_TIME_MS 30  // ~33 FPS
 
+// ===== Const Definitions =====
+// LCD display dimensions
+#define LCD_WIDTH 240
+#define LCD_HEIGHT 240
+#define PLAY_AREA_Y0 25  // Leave space at top for title
+
+// Player parameters 
+#define PLAYER_RADIUS 6
+#define PLAYER_COLOR 2
+// Player Movement parameters
+#define MOVE_SPEED 2      // Pixels to move per update
+#define MOVE_DELAY_MS 30  // Milliseconds between movement updates
+
+// Enemy parameters
+#define TARGET_RADIUS 4
+#define TARGET_COLOR 6
+#define TARGET_COUNT 5
+
+// Bullet parameters
+#define BULLET_RADIUS 2
+#define BULLET_SPEED 1
+#define BULLET_FIRE_INTERVAL_MS 500
+#define MAX_BULLETS 5
+
+#define BTN3_HOLD_MS 1500
+
+
 static const char* mode_options[] = {
-    "MODE 1", // 模式内部显示
-    "MODE 2",
-    "MODE 3"
+    "Easy", // 模式内部显示
+    "Hard",
+    "Infinite"
 };
 
-MenuState Game1_Run(void) {
+// ===== Game Function Prototypes =====
+uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
+                        uint16_t x2, uint16_t y2, uint16_t r2);
+
+void Place_Target(uint8_t index,
+                  uint16_t *target_x,
+                  uint16_t *target_y,
+                  uint16_t player_x,
+                  uint16_t player_y);
+
+// ===== Game Function Implementations =====
+
+static uint16_t Random_U16(uint16_t max)
+{
+  uint32_t rnd = 0;
+  HAL_RNG_GenerateRandomNumber(&hrng, &rnd);
+  return (uint16_t)(rnd % max);
+}
+
+// Reference: Unit 3.2 Joystick
+
+/**
+ * @brief Check if two circles overlap (for collision detection)
+ * 
+ * Two circles collide when the distance between their centers is less than
+ * the sum of their radii. This function calculates the squared distance to
+ * avoid expensive sqrt() operations - we compare squared distances instead.
+ * 
+ * @param x1, y1 Center coordinates of first circle
+ * @param x2, y2 Center coordinates of second circle
+ * @param r1, r2 Radii of the two circles
+ * @return 1 if circles overlap, 0 otherwise
+ */
+uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
+                        uint16_t x2, uint16_t y2, uint16_t r2)
+{
+  int32_t dx = (int32_t)x2 - (int32_t)x1;
+  int32_t dy = (int32_t)y2 - (int32_t)y1;
+  int32_t dist_squared = (dx * dx) + (dy * dy);
+  int32_t radii_sum = r1 + r2;
+  int32_t radii_sum_squared = radii_sum * radii_sum;
+  
+  return (dist_squared <= radii_sum_squared) ? 1 : 0;
+}
+
+/**
+ * @brief Place a target at a random screen location that doesn't collide with player or other targets
+ * 
+ * This function uses a trial-and-error approach to find a valid spawn location:
+ * 1) Generate random X/Y pixel coordinates within screen bounds
+ * 2) Check if the location collides with the player using circle overlap detection
+ * 3) Check if the location collides with any other targets
+ * 4) If no collision, place the target and draw it on screen
+ * 5) If collision detected, try again (up to 100 attempts)
+ * 
+ * The collision checking uses circle overlap: two circles collide if the distance
+ * between their centers is less than the sum of their radii. This creates smooth,
+ * natural-feeling collisions rather than harsh grid-based detection.
+ * 
+ * @param index Which target slot (0 to TARGET_COUNT-1) to place
+ * @param target_x Array holding X pixel positions of all targets
+ * @param target_y Array holding Y pixel positions of all targets
+ * @param player_x Current player X position (to avoid spawning on player)
+ * @param player_y Current player Y position
+ */
+void Place_Target(uint8_t index,
+                  uint16_t *target_x,
+                  uint16_t *target_y,
+                  uint16_t player_x,
+                  uint16_t player_y)
+{
+  uint8_t tries = 0;
+  const uint16_t min_spacing = (PLAYER_RADIUS + TARGET_RADIUS) * 2;  // Minimum distance from player/targets
+
+  while (tries < 100)
+  {
+    // Generate random position within play area, with margins for the target radius
+    uint16_t x = Random_U16(LCD_WIDTH - 2 * TARGET_RADIUS) + TARGET_RADIUS;
+    uint16_t y = Random_U16(LCD_HEIGHT - PLAY_AREA_Y0 - 2 * TARGET_RADIUS) + PLAY_AREA_Y0 + TARGET_RADIUS;
+
+    // Check collision with player
+    uint8_t collision = Circles_Overlap(x, y, min_spacing / 2, player_x, player_y, PLAYER_RADIUS);
+    
+    // Check collision with other targets
+    if (!collision)
+    {
+      for (uint8_t i = 0; i < TARGET_COUNT; i++)
+      {
+        if (i == index)
+        {
+          continue;
+        }
+
+        if (Circles_Overlap(x, y, TARGET_RADIUS, target_x[i], target_y[i], TARGET_RADIUS))
+        {
+          collision = 1;
+          break;
+        }
+      }
+    }
+
+    if (!collision)
+    {
+      target_x[index] = x;
+      target_y[index] = y;
+
+      LCD_Draw_Circle(x, y, TARGET_RADIUS, TARGET_COLOR, 1);
+      return;
+    }
+
+    tries++;
+  }
+}
+
+
+
+MenuState Game1_Run(void) 
+{
     SubMenuSystem submenu;
     SubMenuState selected_mode;
+    Joystick_t joystick_data;
 
     SubMenu_Init(&submenu);
 
@@ -50,79 +199,159 @@ MenuState Game1_Run(void) {
             return MENU_STATE_HOME;
         }
 
-        // Initialize game state
-        animation_counter = 0;
-        moving_x = 0;
-        move_direction = 1;
-
-        // Only use to test different modes
-        int16_t move_step = 2;
-        if (selected_mode == SUBMENU_1_STATE_2) {
-            move_step = 4;
-        } else if (selected_mode == SUBMENU_1_STATE_3) {
-            move_step = 6;
-        }
-
         // Play a brief startup sound
         buzzer_tone(&buzzer_cfg, 1000, 30);  // 1kHz at 30% volume
         HAL_Delay(50);  // Brief beep duration
         buzzer_off(&buzzer_cfg);  // Stop the buzzer
 
+        // ===== Initialize Game =====
+        LCD_Fill_Buffer(0);
+        
+        // Initialize player at center of screen
+        uint16_t player_x = LCD_WIDTH / 2;
+        uint16_t player_y = LCD_HEIGHT / 2;
+
+        // Draw player
+        LCD_Draw_Circle(player_x, player_y, PLAYER_RADIUS, PLAYER_COLOR, 1);
+        LCD_Refresh(&cfg0);
+
+        // Arrays to store target positions
+        uint16_t target_x[TARGET_COUNT] = {0};
+        uint16_t target_y[TARGET_COUNT] = {0};
+
+        // Initial targets
+        for (uint8_t i = 0; i < TARGET_COUNT; i++)
+        {
+            Place_Target(i, target_x, target_y, player_x, player_y);
+        }
+
+        // Initialize variables for game state
+        uint32_t last_move_tick = HAL_GetTick();
+        uint16_t prev_player_x = player_x;
+        uint16_t prev_player_y = player_y;
+
+        uint16_t bullet_x[MAX_BULLETS] = {0};
+        int16_t bullet_y[MAX_BULLETS] = {0};
+        uint8_t bullet_active[MAX_BULLETS] = {0};
+        uint32_t last_bullet_tick = HAL_GetTick();
+
+        // Initialize score
+        uint16_t score = 0;
+        char score_str[16];
+        sprintf(score_str, "Score: %4d", score);
+        LCD_Draw_Rect(0, 0, LCD_WIDTH, 25, 0, 1);
+        LCD_printString(score_str, 10, 0, 1, 2);
+
+
         // Game loop
-        while (1) {
+        while (1) 
+        {
             uint32_t frame_start = HAL_GetTick();
 
             // Read input
             Input_Read();
 
-            if (current_input.btn3_pressed) {
-                PWM_SetDuty(&pwm_cfg, 50);  // Reset LED when leaving mode
-                while (current_input.btn3_pressed) {
-                    HAL_Delay(10);
-                    Input_Read();
-                }
-                break;
+            // ===== STEP 1: Read Joystick Input =====
+            Joystick_Read(&joystick_cfg, &joystick_data);
+
+            // ===== STEP 2: Player Movement (Rate-Limited) =====
+            // Only allow movement every MOVE_DELAY_MS milliseconds to control game speed
+            if ((frame_start - last_move_tick) >= MOVE_DELAY_MS && joystick_data.direction != CENTRE)
+            {
+            // Calculate movement delta based on joystick direction
+            // dx/dy represent pixel movement in X and Y directions
+            int16_t dx = 0;
+            int16_t dy = 0;
+
+            switch (joystick_data.direction)
+            {
+                case N:  dy = -MOVE_SPEED; break;
+                case NE: dy = -MOVE_SPEED; dx =  MOVE_SPEED; break;
+                case E:  dx =  MOVE_SPEED; break;
+                case SE: dy =  MOVE_SPEED; dx =  MOVE_SPEED; break;
+                case S:  dy =  MOVE_SPEED; break;
+                case SW: dy =  MOVE_SPEED; dx = -MOVE_SPEED; break;
+                case W:  dx = -MOVE_SPEED; break;
+                case NW: dy = -MOVE_SPEED; dx = -MOVE_SPEED; break;
+                default: break;
             }
 
-            // UPDATE: Game logic
-            animation_counter++;
+            // Apply movement if joystick is deflected
+            if (dx != 0 || dy != 0)
+            {
+                int32_t new_x = (int32_t)player_x + dx;
+                int32_t new_y = (int32_t)player_y + dy;
 
-            // Simple animation: move object back and forth
-            moving_x += move_direction * move_step;
-            if (moving_x >= 200 || moving_x <= 0) {
-                move_direction *= -1;
+                // Clamp position to screen boundaries (prevent player from leaving the display)
+                // Keep player radius away from edges so the full circle stays visible
+                if (new_x < PLAYER_RADIUS) new_x = PLAYER_RADIUS;
+                if (new_x >= (LCD_WIDTH - PLAYER_RADIUS)) new_x = LCD_WIDTH - PLAYER_RADIUS - 1;
+                if (new_y < (PLAY_AREA_Y0 + PLAYER_RADIUS)) new_y = PLAY_AREA_Y0 + PLAYER_RADIUS;
+                if (new_y >= (LCD_HEIGHT - PLAYER_RADIUS)) new_y = LCD_HEIGHT - PLAYER_RADIUS - 1;
+
+                player_x = (uint16_t)new_x;
+                player_y = (uint16_t)new_y;
             }
+
+            last_move_tick = frame_start;
+            }
+
+            // ===== STEP 3: Render Player Movement =====
+            // Only redraw if player actually moved (avoids unnecessary LCD operations)
+            if (player_x != prev_player_x || player_y != prev_player_y)
+            {
+                // Erase player at old position (draw circle in background color)
+                LCD_Draw_Circle(prev_player_x, prev_player_y, PLAYER_RADIUS, 0, 1);
+                // Draw player at new position (draw circle in player color)
+                LCD_Draw_Circle(player_x, player_y, PLAYER_RADIUS, PLAYER_COLOR, 1);
+
+                prev_player_x = player_x;
+                prev_player_y = player_y;
+            }
+
+            // ===== STEP -1: Update Display =====
+            // Transfer the frame buffer to the LCD hardware (makes all draws visible)
+            LCD_Refresh(&cfg0);
+
+            // // UPDATE: Game logic
+            // animation_counter++;
+
+            // // Simple animation: move object back and forth
+            // moving_x += move_direction * move_step;
+            // if (moving_x >= 200 || moving_x <= 0) {
+            //     move_direction *= -1;
+            // }
 
             // Example: Vary LED brightness based on animation
-            uint8_t brightness = (moving_x * 100) / 200;
-            PWM_SetDuty(&pwm_cfg, brightness);
+            // uint8_t brightness = (moving_x * 100) / 200;
+            // PWM_SetDuty(&pwm_cfg, brightness);
 
-            // RENDER: Draw to LCD
-            LCD_Fill_Buffer(0);
+            // // RENDER: Draw to LCD
+            // LCD_Fill_Buffer(0);
 
-            // Title
-            LCD_printString("GAME 1", 60, 10, 1, 3);
-            LCD_printString((char*)mode_options[selected_mode - SUBMENU_1_STATE_1], 60, 45, 1, 2);
+            // // Title
+            // LCD_printString("GAME 1", 60, 10, 1, 3);
+            // LCD_printString((char*)mode_options[selected_mode - SUBMENU_1_STATE_1], 60, 45, 1, 2);
 
-            // Simple animated object (moving box)
-            LCD_printString("[*]", 20 + moving_x, 100, 1, 3);
+            // // Simple animated object (moving box)
+            // LCD_printString("[*]", 20 + moving_x, 100, 1, 3);
 
-            // Display counter
-            char counter[32];
-            sprintf(counter, "Frame: %lu", animation_counter);
-            LCD_printString(counter, 50, 150, 1, 2);
+            // // Display counter
+            // char counter[32];
+            // sprintf(counter, "Frame: %lu", animation_counter);
+            // LCD_printString(counter, 50, 150, 1, 2);
 
-            // Show PWM LED usage
-            LCD_printString("LED: PWM Demo", 30, 180, 1, 1);
-            char pwm_str[32];
-            sprintf(pwm_str, "Brightness: %d%%", brightness);
-            LCD_printString(pwm_str, 30, 195, 1, 1);
+            // // Show PWM LED usage
+            // LCD_printString("LED: PWM Demo", 30, 180, 1, 1);
+            // char pwm_str[32];
+            // sprintf(pwm_str, "Brightness: %d%%", brightness);
+            // LCD_printString(pwm_str, 30, 195, 1, 1);
 
-            // Instructions
-            LCD_printString("Press BT3 to", 40, 210, 1, 1);
-            LCD_printString("Back to Mode Menu", 20, 225, 1, 1);
+            // // Instructions
+            // LCD_printString("Press BT3 to", 40, 210, 1, 1);
+            // LCD_printString("Back to Mode Menu", 20, 225, 1, 1);
 
-            LCD_Refresh(&cfg0);
+            // LCD_Refresh(&cfg0);
 
             // Frame timing - wait for remainder of frame time
             uint32_t frame_time = HAL_GetTick() - frame_start;

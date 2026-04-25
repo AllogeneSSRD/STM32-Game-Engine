@@ -11,9 +11,9 @@ extern Joystick_t joystick_data;     // Current joystick readings
 
 // Menu options
 static const char* menu_options[] = {
-    "Mode 1", // 菜单选项
-    "Mode 2", 
-    "Mode 3",
+    "Easy", // 菜单选项
+    "Hard", 
+    "Infinite",
     "Return"
 };
 #define NUM_MENU_OPTIONS 4

@@ -8,6 +8,7 @@
 #include "Buzzer.h"
 #include "stm32l4xx_hal.h"
 #include <stdio.h>
+#include <stdbool.h>
 #include "rng.h"
 #include "tim.h"
 #include "main.h"
@@ -52,18 +53,18 @@ extern InputState current_input;
 
 // Bullet parameters
 #define BULLET_RADIUS 2
-#define BULLET_SPEED 1
+#define BULLET_SPEED 2
 #define BULLET_FIRE_INTERVAL_MS 500
-#define MAX_BULLETS 5
+#define MAX_BULLETS 32
 
 #define BTN3_HOLD_MS 1500
 
 
-static const char* mode_options[] = {
-    "Easy", // 模式内部显示
-    "Hard",
-    "Infinite"
-};
+// static const char* mode_options[] = {
+//     "Easy", // 模式内部显示
+//     "Hard",
+//     "Infinite"
+// };
 
 // ===== Game Function Prototypes =====
 uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
@@ -321,6 +322,8 @@ MenuState Game1_Run(void)
 
                 // Clamp position to screen boundaries (prevent player from leaving the display)
                 // Keep player radius away from edges so the full circle stays visible
+                // 将位置限制在屏幕边界内（防止玩家离开屏幕）
+                // 保持玩家半径远离边缘，以便整个圆圈始终可见
                 if (new_x < PLAYER_RADIUS) new_x = PLAYER_RADIUS;
                 if (new_x >= (LCD_WIDTH - PLAYER_RADIUS)) new_x = LCD_WIDTH - PLAYER_RADIUS - 1;
                 if (new_y < (PLAY_AREA_Y0 + PLAYER_RADIUS)) new_y = PLAY_AREA_Y0 + PLAYER_RADIUS;
@@ -335,16 +338,59 @@ MenuState Game1_Run(void)
 
             // ===== STEP 3: Render Player Movement =====
             // Only redraw if player actually moved (avoids unnecessary LCD operations)
+            // 仅当玩家实际移动时才重新绘制（避免不必要的 LCD 操作）
             if (player_x != prev_player_x || player_y != prev_player_y)
             {
                 // Erase player at old position (draw circle in background color)
-                LCD_Draw_Circle(prev_player_x, prev_player_y, PLAYER_RADIUS, 0, 1);
                 // Draw player at new position (draw circle in player color)
+                // 擦除玩家上一帧的图像（以背景色绘制圆圈）
+                // 在新位置绘制玩家（用玩家颜色绘制圆圈）                
+                LCD_Draw_Circle(prev_player_x, prev_player_y, PLAYER_RADIUS, 0, 1);
                 LCD_Draw_Circle(player_x, player_y, PLAYER_RADIUS, PLAYER_COLOR, 1);
 
                 prev_player_x = player_x;
                 prev_player_y = player_y;
             }
+
+            // ===== STEP 4: Bullet Create and Movement =====
+            // Update - fire
+            bool fired = false;
+            if ((frame_start - last_bullet_tick) >= BULLET_FIRE_INTERVAL_MS)
+            {
+                for (uint8_t i = 0; i < MAX_BULLETS; i++)
+                {
+                    if (!bullet_active[i])
+                    {
+                        bullet_x[i] = player_x;
+                        bullet_y[i] = (int16_t)player_y - PLAYER_RADIUS - BULLET_RADIUS;
+                        bullet_active[i] = 1;
+                        // LCD_Draw_Circle(bullet_x[i], (uint16_t)bullet_y[i], BULLET_RADIUS, 3, 1);
+                        fired = true;
+                        break;
+                    }
+                }
+                if (fired) last_bullet_tick = frame_start;
+            }
+
+            // Update - move
+            for (uint8_t i = 0; i < MAX_BULLETS; i++)
+            {
+                // Old position for bullet (used to erase previous frame)
+                if (!bullet_active[i]) continue;
+                LCD_Draw_Circle(bullet_x[i], (uint16_t)bullet_y[i], BULLET_RADIUS, 0, 1);
+
+                // New position for bullet (move up)
+                bullet_y[i] -= BULLET_SPEED;
+                if (bullet_y[i] <= (PLAY_AREA_Y0 + BULLET_RADIUS)) 
+                {
+                    bullet_active[i] = 0;
+                }
+                else
+                {
+                    LCD_Draw_Circle(bullet_x[i], (uint16_t)bullet_y[i], BULLET_RADIUS, 3, 1);
+                }
+            }
+
 
             // ===== STEP -1: Update Display =====
             // Transfer the frame buffer to the LCD hardware (makes all draws visible)

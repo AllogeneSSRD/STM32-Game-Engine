@@ -10,7 +10,8 @@
 typedef enum {
     MENU_GAME2_MAP1,          // Running Game 1
     MENU_GAME2_MAP2,          // Running MAP 2
-    MENU_GAME2_MAP3,          // Running MAP 3
+    MENU_GAME2_MAP3, 
+    BACK         // Running MAP 3
 } MapState;
 
 // Map system structure

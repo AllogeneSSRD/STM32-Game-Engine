@@ -327,6 +327,12 @@ MenuState Game2_Run(void) {
     Map_Init(&map);
     selected_map = Map_Run(&map);
 
+    
+    if (selected_map == BACK)
+    { 
+        return MENU_STATE_HOME;
+    }
+
     //Match map based on selection
     Mapmatching(selected_map);
 

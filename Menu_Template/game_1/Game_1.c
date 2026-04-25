@@ -817,7 +817,8 @@ MenuState Game1_Run(void)
                         break;
                     }
                 }
-            }                        
+            }
+            
             if (difficulty.win_score > 0)
             {
                 sprintf(hud_str, "%s  %2d/%3d  L:%2d", difficulty.mode_name, score, difficulty.win_score, lives);

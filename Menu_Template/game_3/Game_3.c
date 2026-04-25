@@ -271,7 +271,8 @@ void Initialize_Ghosts(DifficultyState diffi)
 }
 
 //Draw Ghost
-void Draw_Ghosts(void) {
+void Draw_Ghosts(void) 
+{
     const uint8_t *ghost_sprites[4] = {
         ghost_red, ghost_green, ghost_blue, ghost_orange
     };

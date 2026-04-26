@@ -431,7 +431,7 @@ MenuState Game3_Run(void)
             }
 
             //Power dots duration time
-            if (pacman_powered && now >= power_end_tick)
+            if (pacman_powered == 1 && now >= power_end_tick)
             {
                 pacman_powered = 0;
             }

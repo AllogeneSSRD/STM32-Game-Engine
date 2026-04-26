@@ -13,9 +13,10 @@ extern Joystick_t joystick_data;     // Current joystick readings
 static const char* map_options[] = {
     "Map 1(3 lanes)",
     "Map 2(4 lanes)", 
-    "Map 3(5 lanes)"
+    "Map 3(5 lanes)",   
+    "Return"
 };
-#define NUM_MAP_OPTIONS 3//Number of menu options
+#define NUM_MAP_OPTIONS 4//Number of menu options
 
 // Frame rate for menu (in milliseconds)
 #define MENU_FRAME_TIME_MS 30  // ~33 FPS
@@ -99,6 +100,8 @@ MapState Map_Run(MapSystem* map) {
                 selected_map = MENU_GAME2_MAP2;
             } else if (map->selected_option == 2) {
                 selected_map = MENU_GAME2_MAP3;
+            }else if (map->selected_option == 3) {
+                selected_map = BACK;
             }
             break;  // Exit menu loop - game selected!
         }

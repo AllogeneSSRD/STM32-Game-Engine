@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "rng.h"
+#include "main.h"
 
 
 extern ST7789V2_cfg_t cfg0;
@@ -39,12 +40,17 @@ static int road_offset = 0;
 #define MAX_ENEMY 4  //Limit the number of cars on the screen at once
 #define MAX_LANES 5     //Maximum number of lanes for the game
 #define CAR_SPEED 3  //Speed of the cars 
+#define CAR1_SPEED 4
+#define CAR2_SPEED 5
 #define PLAYER_RADIUS 6
 #define ENEMY_RADIUS  6
 #define ENEMY_SPACING 68   //Minimum distance between enemy vehicles
 #define REWARD_SCORE_GAIN   5
 #define REWARD_SCORE_LOSS   3
 #define WIN_SCORE 25
+#define FOLLOW_DISTANCE  60   // Follow the car deceleration distance
+#define BTN3_HOLD_EXIT_MS   3000
+
 
 // number of lanes
 static int num_lanes = 3;
@@ -60,6 +66,7 @@ typedef struct
     int x;
     int y;
     int speed;
+    int base_speed;
 } EnemyCar;
 
 static EnemyCar enemies[MAX_ENEMY];
@@ -278,7 +285,16 @@ static void Enemy_Init(void)
             enemies[i].y = ROAD_TOP - i * 40;
         }while (EnemyFrontCar(&enemies[i]));
  
-        enemies[i].speed = CAR_SPEED;     
+        
+        if (i == 0)
+        {
+            enemies[i].speed = CAR_SPEED;   // 3
+        }
+        else if (i == 1)
+            enemies[i].speed = CAR1_SPEED;  // 4
+        else
+            enemies[i].speed = CAR2_SPEED;  // 5
+        enemies[i].base_speed = enemies[i].speed;
     }
 }
 
@@ -308,6 +324,7 @@ static void Reward_Update(void)
 MenuState Game2_Run(void) {
     // Initialize game state
     int win = 0;
+    int game_playing = 0; 
     remaining_lives = 3;
     score = 0;
 
@@ -327,6 +344,12 @@ MenuState Game2_Run(void) {
     Map_Init(&map);
     selected_map = Map_Run(&map);
 
+    
+    if (selected_map == BACK)
+    { 
+        return MENU_STATE_HOME;
+    }
+
     //Match map based on selection
     Mapmatching(selected_map);
 
@@ -340,32 +363,107 @@ MenuState Game2_Run(void) {
     Enemy_Init();
     Reward_Init(); 
 
+    uint32_t btn3_exit = 0;
+
     while(remaining_lives > 0)
     {
+        if (btn3_exit) break;
+
+        LCD_Fill_Buffer(0);
+        LCD_Refresh(&cfg0);
+        buzzer_tone(&buzzer_cfg, 3000, 30);  // 1kHz at 30% volume
+        HAL_Delay(50);  // Brief beep duration
+        buzzer_off(&buzzer_cfg);  // Stop the buzzer
+
+
+        game_playing = 1;
         //Reset player position
         Initialize_Player_Center();
         
         HAL_Delay(300); // Brief pause before starting
-        while (1) {
+
+        // Initialize button hold tracking for returning to submenu
+        uint32_t btn3_press_start_ms = 0;   // 按下开始时间
+        uint32_t btn3_hold_ms = 0;          // 已按住的时间
+        
+
+        while (1) 
+        {
+            uint32_t frame_start = HAL_GetTick();
+
+            // Read input
+            Input_Read();
+
+            // 按下瞬间 -> 记录起始时间
+            if (current_input.btn3_pressed) btn3_press_start_ms = frame_start;
+            if (btn3_press_start_ms != 0) 
+            {
+                if (HAL_GPIO_ReadPin(BTN3_GPIO_Port, BTN3_Pin) == GPIO_PIN_RESET)
+                {
+                    btn3_hold_ms = frame_start - btn3_press_start_ms;
+
+                    buzzer_tone(&buzzer_cfg, 2000, 30);  // 1kHz at 30% volume
+                    HAL_Delay(23);  // Brief beep duration
+                    buzzer_off(&buzzer_cfg);  // Stop the buzzer
+
+                    if (btn3_hold_ms >= 2000) {
+                        btn3_exit = 1;
+                        break;
+                    }
+                }
+                else // 松手 -> 清零
+                {
+                    btn3_press_start_ms = 0;
+                    btn3_hold_ms = 0;
+                }
+            }
+            
+
             char lives_text[32];
             char score_text[32];
 
             //Read Joystick
             Joystick_Read(&joystick_cfg, &joystick_data);
             Movement_to_Joystick(&joystick_data);
-
-            uint32_t frame_start = HAL_GetTick();
         
             // Read input
             Input_Read();
         
             // Check if button was pressed to return to menu
-            if (current_input.btn3_pressed) 
+            
+            if (current_input.btn3_pressed && !game_playing)
             {
                 exit_state = MENU_STATE_HOME;
-                break;  // Exit game loop
+                break;
             }
-        
+
+            
+// ===== Simple no-overtake logic (VERY SIMPLE) =====
+for (int i = 0; i < enemy_count; i++)
+{
+    // 默认使用原始速度
+    enemies[i].speed = enemies[i].base_speed;
+
+    for (int j = 0; j < enemy_count; j++)
+    {
+        if (i == j) continue;
+
+        // 同一车道，j 在 i 前面
+        if (enemies[i].x == enemies[j].x &&
+            enemies[j].y > enemies[i].y)
+        {
+            // 后车速度不能超过前车
+            if (enemies[i].speed > enemies[j].speed)
+            {
+                enemies[i].speed = enemies[j].speed;
+            }
+        }
+    }
+}
+
+
+
+
             //Overtaking bonus points
 
             for (int i = 0; i < enemy_count; i++)
@@ -444,10 +542,15 @@ MenuState Game2_Run(void) {
         Draw_Reward();
 
         
-    for (int i = 0; i < enemy_count;
-         i++)
+    for (int i = 0; i < enemy_count; i++)
     {
-        LCD_printString("V", enemies[i].x, enemies[i].y, 1, 2);
+        if (enemies[i].base_speed == CAR_SPEED)
+            LCD_printString("V", enemies[i].x, enemies[i].y, 1, 2);
+        else if (enemies[i].base_speed == CAR1_SPEED)
+            LCD_printString("W", enemies[i].x, enemies[i].y, 1, 2);
+        else
+            LCD_printString("X", enemies[i].x, enemies[i].y, 1, 2);
+
     }
 
         
@@ -514,7 +617,7 @@ if (win)
     LCD_printString("BACK TO MENU...", 40, 120, 1, 2);
     LCD_Refresh(&cfg0);
 
-    HAL_Delay(4000);
+    HAL_Delay(2000);
 
     
     return exit_state;  // Tell main where to go next

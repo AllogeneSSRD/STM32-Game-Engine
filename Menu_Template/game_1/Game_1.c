@@ -52,7 +52,7 @@ extern InputState current_input;
 // Enemy parameters
 #define TARGET_RADIUS 4
 #define TARGET_COLOR 6
-#define TARGET_COUNT 5
+#define TARGET_COUNT 8
 #define TARGET_FALL_SPEED 1
 #define TARGET_MOVE_DELAY_MS 66
 
@@ -68,8 +68,8 @@ extern InputState current_input;
 #define TARGET_ITEM_HEIGHT 10
 #define TARGET_ITEM_FALL_SPEED 1
 #define TARGET_ITEM_HEAL_COLOR 7
-#define TARGET_ITEM_SPREAD_COLOR 9
-#define TARGET_ITEM_HEAL_HP 2
+#define TARGET_ITEM_SPREAD_COLOR 14
+#define TARGET_ITEM_HEAL_HP 1
 #define TARGET_ITEM_SPREAD_HP 1
 
 #define TARGET_SCORE_NORMAL 1
@@ -91,7 +91,7 @@ extern InputState current_input;
 #define ENEMY_BULLET_SPEED 2
 #define ENEMY_BULLET_COLOR 7
 
-#define EASY_WIN_SCORE 50
+#define EASY_WIN_SCORE 100
 #define HARD_WIN_SCORE 200
 
 #define BTN3_HOLD_MS 1500
@@ -188,8 +188,8 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.boss_fire_interval_ms = 1000;
         cfg.advanced_spawn_chance = 30;
         cfg.boss_spawn_chance = 10;
-        cfg.heal_spawn_chance = 8;
-        cfg.spread_spawn_chance = 8;
+        cfg.heal_spawn_chance = 5;
+        cfg.spread_spawn_chance = 5;
         cfg.win_score = 0;
     }
     else
@@ -519,10 +519,8 @@ MenuState Game1_Run(void)
 
             // 按下瞬间 -> 记录起始时间
             if (current_input.btn3_pressed) btn3_press_start_ms = frame_start;
-            // 如果已经开始计时
             if (btn3_press_start_ms != 0) 
             {
-                // Read GPIO 是否仍然按住
                 if (HAL_GPIO_ReadPin(BTN3_GPIO_Port, BTN3_Pin) == GPIO_PIN_RESET)
                 {
                     btn3_hold_ms = frame_start - btn3_press_start_ms;
@@ -533,7 +531,24 @@ MenuState Game1_Run(void)
                     LCD_Draw_Rect(0, LCD_HEIGHT - 20, LCD_WIDTH, 20, 0, 1);
                     LCD_printString(btn_hold_str, 10, 220, 1, 1);
 
-                    if (btn3_hold_ms >= BTN3_HOLD_MS) {
+                    if (btn3_hold_ms >= BTN3_HOLD_MS) 
+                    {
+                        // Game over
+                        char score_str[64];
+                        sprintf(score_str, "Score: %2d  HP: %2d", score, lives);
+
+                        buzzer_note(&buzzer_cfg, NOTE_A4, 60);
+                        LCD_Fill_Buffer(0);
+                        LCD_printString("GAME Exit", 40, 120, 15, 3);
+                        LCD_printString(score_str, 20, 160, 1, 2);
+                        LCD_Refresh(&cfg0);
+                        HAL_Delay(3500);
+                        buzzer_off(&buzzer_cfg);
+
+                        LCD_Fill_Buffer(0);
+                        LCD_printString("BACK TO MENU...", 20, 120, 1, 2);
+                        LCD_Refresh(&cfg0);
+                        HAL_Delay(1000);
                         break;
                     }
                 }
@@ -890,9 +905,9 @@ MenuState Game1_Run(void)
                 buzzer_note(&buzzer_cfg, NOTE_A4, 60);
                 LCD_Fill_Buffer(0);
                 LCD_printString("GAME OVER", 40, 120, 15, 3);
-                LCD_printString(score_str, 20, 145, 1, 2);
+                LCD_printString(score_str, 20, 160, 1, 2);
                 LCD_Refresh(&cfg0);
-                HAL_Delay(2000);
+                HAL_Delay(3000);
                 buzzer_off(&buzzer_cfg);
 
                 LCD_Fill_Buffer(0);

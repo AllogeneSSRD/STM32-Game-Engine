@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "rng.h"
+#include "main.h"
 
 
 extern ST7789V2_cfg_t cfg0;
@@ -51,8 +52,6 @@ static int road_offset = 0;
 #define BTN3_HOLD_EXIT_MS   3000
 
 
-static uint32_t btn3_press_start_ms = 0;
-static uint32_t btn3_hold_ms = 0;
 // number of lanes
 static int num_lanes = 3;
 // The X-coordinate of each lane
@@ -364,22 +363,68 @@ MenuState Game2_Run(void) {
     Enemy_Init();
     Reward_Init(); 
 
+    uint32_t btn3_exit = 0;
+
     while(remaining_lives > 0)
     {
+        if (btn3_exit) break;
+
+        LCD_Fill_Buffer(0);
+        LCD_Refresh(&cfg0);
+        buzzer_tone(&buzzer_cfg, 3000, 30);  // 1kHz at 30% volume
+        HAL_Delay(50);  // Brief beep duration
+        buzzer_off(&buzzer_cfg);  // Stop the buzzer
+
+
         game_playing = 1;
         //Reset player position
         Initialize_Player_Center();
         
         HAL_Delay(300); // Brief pause before starting
-        while (1) {
+
+        // Initialize button hold tracking for returning to submenu
+        uint32_t btn3_press_start_ms = 0;   // 按下开始时间
+        uint32_t btn3_hold_ms = 0;          // 已按住的时间
+        
+
+        while (1) 
+        {
+            uint32_t frame_start = HAL_GetTick();
+
+            // Read input
+            Input_Read();
+
+            // 按下瞬间 -> 记录起始时间
+            if (current_input.btn3_pressed) btn3_press_start_ms = frame_start;
+            if (btn3_press_start_ms != 0) 
+            {
+                if (HAL_GPIO_ReadPin(BTN3_GPIO_Port, BTN3_Pin) == GPIO_PIN_RESET)
+                {
+                    btn3_hold_ms = frame_start - btn3_press_start_ms;
+
+                    buzzer_tone(&buzzer_cfg, 2000, 30);  // 1kHz at 30% volume
+                    HAL_Delay(23);  // Brief beep duration
+                    buzzer_off(&buzzer_cfg);  // Stop the buzzer
+
+                    if (btn3_hold_ms >= 2000) {
+                        btn3_exit = 1;
+                        break;
+                    }
+                }
+                else // 松手 -> 清零
+                {
+                    btn3_press_start_ms = 0;
+                    btn3_hold_ms = 0;
+                }
+            }
+            
+
             char lives_text[32];
             char score_text[32];
 
             //Read Joystick
             Joystick_Read(&joystick_cfg, &joystick_data);
             Movement_to_Joystick(&joystick_data);
-
-            uint32_t frame_start = HAL_GetTick();
         
             // Read input
             Input_Read();
@@ -572,7 +617,7 @@ if (win)
     LCD_printString("BACK TO MENU...", 40, 120, 1, 2);
     LCD_Refresh(&cfg0);
 
-    HAL_Delay(4000);
+    HAL_Delay(2000);
 
     
     return exit_state;  // Tell main where to go next

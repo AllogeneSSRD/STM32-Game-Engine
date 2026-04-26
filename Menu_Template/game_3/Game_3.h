@@ -31,6 +31,7 @@
 #define TILE_EMPTY  0   //Free space, player can pass
 #define TILE_WALL   1   //Wall, player cannot pass
 #define TILE_DOT    2   //Dots
+#define TILE_POWER  3   //Power dots
 
 //Count dots amount
 // Easy / Map 1
@@ -43,9 +44,10 @@
 #define TOTAL_DOTS_MAP3 154
 
 //Pacman movement delay
-#define PACMAN_MOVE_DELAY_MS 200 // Milliseconds between movement updates
+#define PACMAN_MOVE_DELAY_MS 200 //Milliseconds between movement updates
 
-#define BTN3_HOLD_MS 2000
+//Power dots remaining time
+#define POWER_DURATION_MS 15000 //15 seconds
 
 // Initialize coordinate
 typedef struct {
@@ -63,8 +65,8 @@ typedef enum {
 } PacmanDirection;
 
 /** Sprites 
- * 8x8 pixels, palette indices: 6=YELLOW  0=BLACK  2=RED  1=WHITE  255=transparent
- * Draw with: LCD_Draw_Sprite(x, y, SPR_SIZE, SPR_SIZE, pacman_right);
+ *  8x8 pixels, palette indices: 6=YELLOW  0=BLACK  2=RED  1=WHITE  255=transparent
+ *  Draw with: LCD_Draw_Sprite(x, y, SPR_SIZE, SPR_SIZE, pacman_right);
  */
 
 #define SPR_SIZE 8

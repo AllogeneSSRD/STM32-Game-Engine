@@ -179,7 +179,7 @@ int main(void)
 {
     /* MCU Configuration */
 
-     HAL_Init();
+    HAL_Init();
     SystemClock_Config();
     PeriphCommonClock_Config();
 

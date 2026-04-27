@@ -44,12 +44,17 @@ static int road_offset = 0;
 #define CAR2_SPEED 5
 #define PLAYER_RADIUS 6
 #define ENEMY_RADIUS  6
-#define ENEMY_SPACING 68   //Minimum distance between enemy vehicles
+#define ENEMY_SPACING 100 //Minimum distance between enemy vehicles
 #define REWARD_SCORE_GAIN   5
 #define REWARD_SCORE_LOSS   3
 #define WIN_SCORE 25
 #define FOLLOW_DISTANCE  60   // Follow the car deceleration distance
 #define BTN3_HOLD_EXIT_MS   3000
+#define POWER_HEAL     0   // 回血
+#define POWER_INVINC  1   // 无敌
+#define INVINCIBLE_TIME_MS 3000
+#define BLINK_INTERVAL_MS 200  
+
 
 
 // number of lanes
@@ -60,6 +65,8 @@ static int lane_x[MAX_LANES];
 static int player_x;
 static int player_y;
 
+static uint8_t invincible = 0;
+static uint32_t invincible_start_ms = 0;
 
 typedef struct
 {
@@ -79,6 +86,16 @@ typedef struct
 } Reward;
 
 static Reward reward; 
+
+typedef struct
+{
+    int x;
+    int y;
+    int type;   // POWER_HEAL or POWER_INVINC
+} PowerUp;
+
+static PowerUp powerup;
+
 
 void Map_SetLanes(int lanes)
 {
@@ -214,7 +231,20 @@ static uint8_t Circles_Overlap(int x1, int y1, int r1, int x2, int y2, int r2)
 
 static void Draw_Player(void)
 {
-    LCD_printString("A", player_x, player_y, 1, 2);
+    // If it is in an invincible state, the car will flash
+    if (invincible)
+    {
+        uint32_t time = HAL_GetTick() - invincible_start_ms;
+        if ((time / BLINK_INTERVAL_MS) % 2 == 0)
+        {
+            LCD_printString("A", player_x, player_y, 1, 2);
+        }
+
+    }
+    else
+    {
+        LCD_printString("A", player_x, player_y, 1, 2);
+    }
 }
 
 
@@ -222,6 +252,15 @@ static void Draw_Player(void)
 static void Draw_Reward(void)
 {
     LCD_printString("*", reward.x, reward.y, 1, 2);
+}
+
+
+static void Draw_PowerUp(void)
+{
+    if (powerup.type == POWER_HEAL)
+        LCD_printString("+", powerup.x, powerup.y, 1, 2);  
+    else
+        LCD_printString("I", powerup.x, powerup.y, 1, 2); 
 }
 
 
@@ -298,6 +337,15 @@ static void Enemy_Init(void)
     }
 }
 
+
+static void PowerUp_Init(void)
+{
+    powerup.x = lane_x[Random_Car()];
+    powerup.y = ROAD_TOP;
+    powerup.type = Random_Car() % 2;
+}
+
+
 static void Reward_Init(void)
 {
     reward.x = lane_x[Random_Car()];
@@ -320,6 +368,15 @@ static void Reward_Update(void)
     }
 }
 
+static void PowerUp_Update(void)
+{
+    powerup.y += CAR_SPEED;
+
+    if (powerup.y > ROAD_BOTTOM)
+    {
+        PowerUp_Init();  
+    }
+}
 
 MenuState Game2_Run(void) {
     // Initialize game state
@@ -362,6 +419,7 @@ MenuState Game2_Run(void) {
 
     Enemy_Init();
     Reward_Init(); 
+    PowerUp_Init(); 
 
     uint32_t btn3_exit = 0;
 
@@ -439,23 +497,28 @@ MenuState Game2_Run(void) {
 
             
 // ===== Simple no-overtake logic (VERY SIMPLE) =====
+
 for (int i = 0; i < enemy_count; i++)
 {
-    // 默认使用原始速度
     enemies[i].speed = enemies[i].base_speed;
 
     for (int j = 0; j < enemy_count; j++)
     {
         if (i == j) continue;
 
-        // 同一车道，j 在 i 前面
+        // 同车道，j 在前
         if (enemies[i].x == enemies[j].x &&
             enemies[j].y > enemies[i].y)
         {
-            // 后车速度不能超过前车
-            if (enemies[i].speed > enemies[j].speed)
+            int distance = enemies[j].y - enemies[i].y;
+
+            // ✅ 距离太近才减速
+            if (distance < FOLLOW_DISTANCE)
             {
-                enemies[i].speed = enemies[j].speed;
+                if (enemies[i].speed > enemies[j].speed)
+                {
+                    enemies[i].speed = enemies[j].speed;
+                }
             }
         }
     }
@@ -489,13 +552,16 @@ for (int i = 0; i < enemy_count; i++)
 
             for (int i = 0; i < enemy_count; i++)
             {
-                if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS,enemies[i].x, enemies[i].y, ENEMY_RADIUS))
+                if (!invincible && Circles_Overlap(player_x, player_y, PLAYER_RADIUS,enemies[i].x, enemies[i].y, ENEMY_RADIUS))
                 {
                     remaining_lives--;
 
                     buzzer_tone(&buzzer_cfg, 400, 60);
                     HAL_Delay(120);
                     buzzer_off(&buzzer_cfg);
+
+                    invincible = 1;
+                    invincible_start_ms = HAL_GetTick();
 
                     Initialize_Player_Center(); 
 
@@ -515,12 +581,40 @@ for (int i = 0; i < enemy_count; i++)
             }
 
 
+            
+// Player collects power-up
+if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS,
+                    powerup.x, powerup.y, 4))
+{
+    if (powerup.type == POWER_HEAL)
+    {
+        if (remaining_lives < 3)
+            remaining_lives++;   // ✅ 回血
+    }
+    else if (powerup.type == POWER_INVINC)
+    {
+        invincible = 1;
+        invincible_start_ms = HAL_GetTick();  // ✅ 开始无敌
+    }
+
+    PowerUp_Init();   // 重生能力点
+}
+
             if (score >= WIN_SCORE)
             {
                 win = 1;
                 exit_state = MENU_STATE_HOME;
                 break;
             }
+
+
+if (invincible)
+{
+    if (HAL_GetTick() - invincible_start_ms >= INVINCIBLE_TIME_MS)
+    {
+        invincible = 0;   // 无敌结束
+    }
+}
 
 
             //Game over
@@ -534,6 +628,7 @@ for (int i = 0; i < enemy_count; i++)
         // RENDER: Draw to LCD
         LCD_Fill_Buffer(0);
         Reward_Update();
+        PowerUp_Update();
 
         Draw_Game2_Map();
 
@@ -541,6 +636,7 @@ for (int i = 0; i < enemy_count; i++)
 
         Draw_Reward();
 
+        Draw_PowerUp();
         
     for (int i = 0; i < enemy_count; i++)
     {

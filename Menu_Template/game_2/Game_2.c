@@ -1,5 +1,6 @@
 #include "Game_2.h"
 #include "Game2_menu.h"
+#include "Car.h"
 #include "InputHandler.h"
 #include "Menu.h"
 #include "LCD.h"
@@ -54,7 +55,6 @@ static int road_offset = 0;
 #define POWER_INVINC  1   // 无敌
 #define INVINCIBLE_TIME_MS 3000
 #define BLINK_INTERVAL_MS 200  
-
 
 
 // number of lanes

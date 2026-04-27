@@ -42,12 +42,13 @@ static int road_offset = 0;
 #define CAR_SPEED 3  //Speed of the cars 
 #define CAR1_SPEED 4
 #define CAR2_SPEED 5
+#define SPEED 1
 #define PLAYER_RADIUS 6
 #define ENEMY_RADIUS  6
 #define ENEMY_SPACING 100 //Minimum distance between enemy vehicles
 #define REWARD_SCORE_GAIN   5
 #define REWARD_SCORE_LOSS   3
-#define WIN_SCORE 25
+#define WIN_SCORE 100
 #define FOLLOW_DISTANCE  60   // Follow the car deceleration distance
 #define BTN3_HOLD_EXIT_MS   3000
 #define POWER_HEAL     0   // 回血
@@ -56,8 +57,9 @@ static int road_offset = 0;
 #define BLINK_INTERVAL_MS 200  
 #define CAR_H 11 
 #define CAR_W 7
+#define ITEM_SAFE_DISTANCE  (ENEMY_RADIUS + 8)
 
-static uint8_t car_X[CAR_H][CAR_W] =
+static const  uint8_t car_X[CAR_H][CAR_W] =
 {
     {0,0,1,1,1,0,0},   
     {0,1,1,1,1,1,0},
@@ -74,7 +76,7 @@ static uint8_t car_X[CAR_H][CAR_W] =
     {0,0,0,0,0,0,0}
 };
 
-static uint8_t car_W[CAR_H][CAR_W] =
+static const  uint8_t car_W[CAR_H][CAR_W] =
 {
     {0,1,1,1,1,1,0},
     {0,1,1,1,1,1,0},
@@ -91,7 +93,7 @@ static uint8_t car_W[CAR_H][CAR_W] =
     {0,0,0,0,0,0,0}
 };
 
-static uint8_t car_V[CAR_H][CAR_W] =
+static const uint8_t car_V[CAR_H][CAR_W] =
 {
     {1,1,1,1,1,1,1},   
     {1,1,1,1,1,1,1},
@@ -107,6 +109,15 @@ static uint8_t car_V[CAR_H][CAR_W] =
     {0,0,0,0,0,0,0},
     {0,0,0,0,0,0,0}
 };
+
+
+static const uint8_t *car_sprites[] =
+{
+    (const uint8_t *)car_V,  
+    (const uint8_t *)car_W,  
+    (const uint8_t *)car_X   
+};
+
 
 
 // number of lanes
@@ -280,7 +291,7 @@ static void Draw_Player(void)
         uint32_t time = HAL_GetTick() - invincible_start_ms;
         if ((time / BLINK_INTERVAL_MS) % 2 == 0)
         {
-            LCD_printString("A", player_x, player_y, 1, 2);
+            LCD_printString("A", player_x, player_y, 3, 2);
         }
 
     }
@@ -294,17 +305,18 @@ static void Draw_Player(void)
 
 static void Draw_Reward(void)
 {
-    LCD_printString("*", reward.x, reward.y, 1, 2);
+    LCD_printString("*", reward.x, reward.y, 5, 2);
 }
 
 
 static void Draw_PowerUp(void)
 {
     if (powerup.type == POWER_HEAL)
-        LCD_printString("+", powerup.x, powerup.y, 1, 2);  
+        LCD_printString("+", powerup.x, powerup.y, 2, 2);  
     else
-        LCD_printString("#", powerup.x, powerup.y, 1, 2); 
+        LCD_printString("#", powerup.x, powerup.y, 4, 2); 
 }
+
 
 
 void Draw_Enemies(void)
@@ -314,18 +326,19 @@ void Draw_Enemies(void)
         int cx = enemies[i].x - CAR_W / 2;
         int cy = enemies[i].y - CAR_H / 2;
 
-        uint8_t *sprite;
+        const uint8_t *sprite;
 
         if (enemies[i].base_speed == CAR_SPEED)
-            sprite = car_V;
+            sprite = car_sprites[0];   
         else if (enemies[i].base_speed == CAR1_SPEED)
-            sprite = car_W;
+            sprite = car_sprites[1];   
         else
-            sprite = car_X;
+            sprite = car_sprites[2];  
 
         LCD_Draw_Sprite(cx, cy, CAR_W, CAR_H, sprite);
     }
 }
+
 
 
 static void Initialize_Player_Center(void)
@@ -417,9 +430,23 @@ static void Reward_Init(void)
 }
 
 
+
 static void Reward_Update(void)
 {
-    reward.y += CAR_SPEED;
+    reward.y += SPEED;
+
+    for (int i = 0; i < enemy_count; i++)
+    {
+        if (abs(enemies[i].x - reward.x) < CAR_W)
+        {
+            int dy = enemies[i].y - reward.y;
+
+            if (dy > 0 && dy < ITEM_SAFE_DISTANCE)
+            {
+                reward.y -= SPEED;
+            }
+        }
+    }
 
     if (reward.y > ROAD_BOTTOM)
     {
@@ -428,17 +455,30 @@ static void Reward_Update(void)
         {
             score = 0;
         }
-        Reward_Init(); 
+        Reward_Init();
     }
 }
 
 static void PowerUp_Update(void)
 {
-    powerup.y += CAR_SPEED;
+    powerup.y += SPEED;
+
+    for (int i = 0; i < enemy_count; i++)
+    {
+        if (abs(enemies[i].x - powerup.x) < CAR_W)
+        {
+            int dy = enemies[i].y - powerup.y;
+
+            if (dy > 0 && dy < ITEM_SAFE_DISTANCE)
+            {
+                powerup.y -= SPEED;
+            }
+        }
+    }
 
     if (powerup.y > ROAD_BOTTOM)
     {
-        PowerUp_Init();  
+        PowerUp_Init();
     }
 }
 
@@ -729,8 +769,8 @@ if (win)
     for (int i = 0; i < 6; i++)
     {
         LCD_Fill_Buffer(0);
-        LCD_printString("YOU WIN!", 50, 100, 1, 3);
-        LCD_printString("SCORE 200+", 40, 140, 1, 2);
+        LCD_printString("YOU WIN!", 50, 100, 2, 3);
+        LCD_printString("SCORE 100+", 40, 140, 1, 2);
         LCD_Refresh(&cfg0);
 
         buzzer_tone(&buzzer_cfg, 1500, 40);

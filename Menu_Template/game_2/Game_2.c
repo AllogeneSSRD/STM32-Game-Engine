@@ -1,6 +1,5 @@
 #include "Game_2.h"
 #include "Game2_menu.h"
-#include "Car.h"
 #include "InputHandler.h"
 #include "Menu.h"
 #include "LCD.h"
@@ -55,6 +54,59 @@ static int road_offset = 0;
 #define POWER_INVINC  1   // 无敌
 #define INVINCIBLE_TIME_MS 3000
 #define BLINK_INTERVAL_MS 200  
+#define CAR_H 11 
+#define CAR_W 7
+
+static uint8_t car_X[CAR_H][CAR_W] =
+{
+    {0,0,1,1,1,0,0},   
+    {0,1,1,1,1,1,0},
+    {0,0,1,1,1,0,0},
+
+    {0,1,1,1,1,1,0},   
+    {1,1,1,1,1,1,1},
+    {1,1,1,1,1,1,1},
+    {0,1,1,1,1,1,0},
+
+    {0,1,0,0,0,1,0},  
+    {0,1,0,0,0,1,0},
+    {0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0}
+};
+
+static uint8_t car_W[CAR_H][CAR_W] =
+{
+    {0,1,1,1,1,1,0},
+    {0,1,1,1,1,1,0},
+    {0,0,1,1,1,0,0},
+
+    {1,1,1,1,1,1,1},
+    {1,1,1,1,1,1,1},
+    {1,1,1,1,1,1,1},
+    {1,1,1,1,1,1,1},
+
+    {1,1,0,0,0,1,1},
+    {1,1,0,0,0,1,1},
+    {0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0}
+};
+
+static uint8_t car_V[CAR_H][CAR_W] =
+{
+    {1,1,1,1,1,1,1},   
+    {1,1,1,1,1,1,1},
+    {1,1,1,1,1,1,1},
+
+    {1,1,1,1,1,1,1},   
+    {1,1,1,1,1,1,1},
+    {1,1,1,1,1,1,1},
+    {1,1,1,1,1,1,1},
+
+    {1,0,1,0,1,0,1},   
+    {1,0,1,0,1,0,1},
+    {0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0}
+};
 
 
 // number of lanes
@@ -177,24 +229,15 @@ static void Movement_to_Joystick(Joystick_t *joystick_data)
 
         switch(car_dir)
     {
-        case DIR_UP:
-            player_y -= CAR_SPEED;
-            break;
+        case DIR_UP:player_y -= CAR_SPEED;break;
 
-        case DIR_DOWN:
-            player_y += CAR_SPEED;
-            break;
+        case DIR_DOWN:player_y += CAR_SPEED;break;
 
-        case DIR_LEFT:
-            player_x -= CAR_SPEED;
-            break;
+        case DIR_LEFT:player_x -= CAR_SPEED;break;
 
-        case DIR_RIGHT:
-            player_x += CAR_SPEED;
-            break;
+        case DIR_RIGHT:player_x += CAR_SPEED;break;
 
-        default:
-            break;
+        default:break;
     }
 
     if(player_x < ROAD_LEFT+5)
@@ -260,7 +303,28 @@ static void Draw_PowerUp(void)
     if (powerup.type == POWER_HEAL)
         LCD_printString("+", powerup.x, powerup.y, 1, 2);  
     else
-        LCD_printString("I", powerup.x, powerup.y, 1, 2); 
+        LCD_printString("#", powerup.x, powerup.y, 1, 2); 
+}
+
+
+void Draw_Enemies(void)
+{
+    for (int i = 0; i < enemy_count; i++)
+    {
+        int cx = enemies[i].x - CAR_W / 2;
+        int cy = enemies[i].y - CAR_H / 2;
+
+        uint8_t *sprite;
+
+        if (enemies[i].base_speed == CAR_SPEED)
+            sprite = car_V;
+        else if (enemies[i].base_speed == CAR1_SPEED)
+            sprite = car_W;
+        else
+            sprite = car_X;
+
+        LCD_Draw_Sprite(cx, cy, CAR_W, CAR_H, sprite);
+    }
 }
 
 
@@ -377,6 +441,8 @@ static void PowerUp_Update(void)
         PowerUp_Init();  
     }
 }
+
+
 
 MenuState Game2_Run(void) {
     // Initialize game state
@@ -632,17 +698,9 @@ if (invincible)
         Draw_Reward();
 
         Draw_PowerUp();
+        Draw_Enemies();
         
-    for (int i = 0; i < enemy_count; i++)
-    {
-        if (enemies[i].base_speed == CAR_SPEED)
-            LCD_printString("V", enemies[i].x, enemies[i].y, 1, 2);
-        else if (enemies[i].base_speed == CAR1_SPEED)
-            LCD_printString("W", enemies[i].x, enemies[i].y, 1, 2);
-        else
-            LCD_printString("X", enemies[i].x, enemies[i].y, 1, 2);
-
-    }
+    
 
         
     sprintf(lives_text, "Lives: %lu", (unsigned long)remaining_lives);

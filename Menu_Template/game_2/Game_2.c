@@ -441,8 +441,8 @@ MenuState Game2_Run(void) {
         HAL_Delay(300); // Brief pause before starting
 
         // Initialize button hold tracking for returning to submenu
-        uint32_t btn3_press_start_ms = 0;   // 按下开始时间
-        uint32_t btn3_hold_ms = 0;          // 已按住的时间
+        uint32_t btn3_press_start_ms = 0;   // Press start time
+        uint32_t btn3_hold_ms = 0;          // Time held down
         
 
         while (1) 
@@ -452,7 +452,7 @@ MenuState Game2_Run(void) {
             // Read input
             Input_Read();
 
-            // 按下瞬间 -> 记录起始时间
+            // Press Instant ->Record Start Time
             if (current_input.btn3_pressed) btn3_press_start_ms = frame_start;
             if (btn3_press_start_ms != 0) 
             {
@@ -469,7 +469,7 @@ MenuState Game2_Run(void) {
                         break;
                     }
                 }
-                else // 松手 -> 清零
+                else //Release ->Reset
                 {
                     btn3_press_start_ms = 0;
                     btn3_hold_ms = 0;
@@ -495,34 +495,29 @@ MenuState Game2_Run(void) {
                 break;
             }
 
-            
-// ===== Simple no-overtake logic (VERY SIMPLE) =====
 
-for (int i = 0; i < enemy_count; i++)
-{
-    enemies[i].speed = enemies[i].base_speed;
-
-    for (int j = 0; j < enemy_count; j++)
+    for (int i = 0; i < enemy_count; i++)
     {
-        if (i == j) continue;
+        enemies[i].speed = enemies[i].base_speed;
 
-        // 同车道，j 在前
-        if (enemies[i].x == enemies[j].x &&
-            enemies[j].y > enemies[i].y)
+        for (int j = 0; j < enemy_count; j++)
         {
-            int distance = enemies[j].y - enemies[i].y;
-
-            // ✅ 距离太近才减速
-            if (distance < FOLLOW_DISTANCE)
+            if (i != j) 
             {
-                if (enemies[i].speed > enemies[j].speed)
+                if (enemies[i].x == enemies[j].x && enemies[j].y > enemies[i].y)
                 {
-                    enemies[i].speed = enemies[j].speed;
+                    int distance = enemies[j].y - enemies[i].y;
+                    if (distance < FOLLOW_DISTANCE)
+                    {
+                        if (enemies[i].speed > enemies[j].speed)
+                        {
+                            enemies[i].speed = enemies[j].speed;
+                        }
+                    }   
                 }
             }
         }
     }
-}
 
 
 
@@ -589,15 +584,15 @@ if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS,
     if (powerup.type == POWER_HEAL)
     {
         if (remaining_lives < 3)
-            remaining_lives++;   // ✅ 回血
+            remaining_lives++;   
     }
     else if (powerup.type == POWER_INVINC)
     {
         invincible = 1;
-        invincible_start_ms = HAL_GetTick();  // ✅ 开始无敌
+        invincible_start_ms = HAL_GetTick();  
     }
 
-    PowerUp_Init();   // 重生能力点
+    PowerUp_Init();   
 }
 
             if (score >= WIN_SCORE)
@@ -612,7 +607,7 @@ if (invincible)
 {
     if (HAL_GetTick() - invincible_start_ms >= INVINCIBLE_TIME_MS)
     {
-        invincible = 0;   // 无敌结束
+        invincible = 0;  
     }
 }
 

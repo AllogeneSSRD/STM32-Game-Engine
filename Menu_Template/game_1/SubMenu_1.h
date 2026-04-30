@@ -8,7 +8,7 @@
 // ==============================================
 
 typedef enum {
-    SUBMENU_1_STATE_HOME = 0,        // Main menu - select game
+    SUBMENU_1_STATE_HOME = 0,   // Main menu - select game
     SUBMENU_1_STATE_1,          // Game mode 1
     SUBMENU_1_STATE_2,          // Game mode 2
     SUBMENU_1_STATE_3,          // Game mode 3

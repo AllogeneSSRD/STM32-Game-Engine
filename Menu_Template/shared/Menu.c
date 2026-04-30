@@ -12,7 +12,7 @@ extern Joystick_t joystick_data;     // Current joystick readings
 // Menu options
 static const char* menu_options[] = {
     "Aircraft Shooting",
-    "Game 2", 
+    "Car Overtaking", 
     "Pac-Man"
 };
 #define NUM_MENU_OPTIONS 3
@@ -38,10 +38,10 @@ static void render_home_menu(MenuSystem* menu) {
             // Highlight selected option with inverted colors
             // Draw a rectangle around selected option
             // We'll use simple marker instead
-            LCD_printString(">", 40, y_pos, 1, text_size);  // Arrow pointing to selection
+            LCD_printString(">", 15, y_pos, 1, text_size);  // Arrow pointing to selection
         }
         
-        LCD_printString((char*)menu_options[i], 70, y_pos, 1, text_size);
+        LCD_printString((char*)menu_options[i], 35, y_pos, 1, text_size);
     }
     
     // Instructions

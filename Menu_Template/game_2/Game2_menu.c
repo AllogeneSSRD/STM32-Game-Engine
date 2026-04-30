@@ -14,7 +14,7 @@ static const char* map_options[] = {
     "Map 1(3 lanes)",
     "Map 2(4 lanes)", 
     "Map 3(5 lanes)",   
-    "Return"
+    "Back"
 };
 #define NUM_MAP_OPTIONS 4//Number of menu options
 

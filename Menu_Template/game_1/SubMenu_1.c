@@ -14,7 +14,7 @@ static const char* menu_options[] = {
     "Easy", // 菜单选项
     "Hard", 
     "Infinite",
-    "Return"
+    "Back"
 };
 #define NUM_MENU_OPTIONS 4
 

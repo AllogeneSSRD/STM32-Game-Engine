@@ -1,17 +1,28 @@
-#include "Game_1.h"
-#include "InputHandler.h"
-#include "Menu.h"
-#include "SubMenu_1.h"
-#include "Joystick.h"
+// standard library 
+#include <stdio.h>
+#include <stdbool.h>
+
+// STM32 / HAL
+#include "stm32l4xx_hal.h"
+#include "main.h"
+#include "rng.h"
+#include "tim.h"
+
+// Hardware drivers
 #include "LCD.h"
 #include "PWM.h"
 #include "Buzzer.h"
-#include "stm32l4xx_hal.h"
-#include <stdio.h>
-#include <stdbool.h>
-#include "rng.h"
-#include "tim.h"
-#include "main.h"
+#include "Joystick.h"
+#include "InputHandler.h"
+
+// System modules
+#include "Menu.h"
+#include "Utils.h"
+
+// Game modules
+#include "Game_1.h"
+#include "SubMenu_1.h"
+#include "Utils_1.h"
 
 
 extern ST7789V2_cfg_t cfg0;
@@ -24,11 +35,7 @@ extern InputState current_input;
 /**
  * @brief Game 1 Implementation - Student can modify
  * 
- * EXAMPLE: Shows how to use PWM LED for visual feedback
- * This is a placeholder with a bouncing animation that changes LED brightness.
- * Replace this with your actual game logic!
  */
-
 
 // Frame rate for this game (in milliseconds)
 #define GAME1_FRAME_TIME_MS 30  // ~33 FPS
@@ -96,13 +103,6 @@ extern InputState current_input;
 
 #define BTN3_HOLD_MS 1500
 
-
-// static const char* mode_options[] = {
-//     "Easy", // 模式内部显示
-//     "Hard",
-//     "Infinite"
-// };
-
 // ===== Game Function Prototypes =====
 typedef struct {
     const char* mode_name;
@@ -125,10 +125,16 @@ typedef enum {
     TARGET_TYPE_ITEM_SPREAD
 } TargetType;
 
-uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
-                        uint16_t x2, uint16_t y2, uint16_t r2);
 
-void Place_Target(uint8_t index,
+static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode);
+static TargetType Pick_Target_Type(const GameDifficulty *difficulty);
+static uint8_t Get_Target_Radius(TargetType type);
+static uint8_t Get_Target_Color(TargetType type);
+static int16_t Get_Target_Initial_HP(TargetType type);
+static uint16_t Get_Target_Kill_Score(TargetType type);
+static uint8_t Is_Target_Item(TargetType type);
+static void Draw_Target_Entity(uint16_t x, uint16_t y, TargetType type, uint8_t color);
+static void Place_Target(uint8_t index,
                   uint16_t *target_x,
                   uint16_t *target_y,
                   TargetType *target_type,
@@ -138,34 +144,26 @@ void Place_Target(uint8_t index,
                   uint16_t player_y,
                   const GameDifficulty *difficulty);
 
-static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode);
-static TargetType Pick_Target_Type(const GameDifficulty *difficulty);
-static uint8_t Get_Target_Radius(TargetType type);
-static uint8_t Get_Target_Color(TargetType type);
-static int16_t Get_Target_Initial_HP(TargetType type);
-static uint16_t Get_Target_Kill_Score(TargetType type);
-static uint8_t Is_Target_Item(TargetType type);
-static int32_t Max(int32_t a, int32_t b);
-static int32_t Clamp(int32_t value, int32_t min_value, int32_t max_value);
-static uint8_t Circle_Rect_Overlap(uint16_t circle_x, uint16_t circle_y, uint16_t circle_r,
-                                   uint16_t rect_center_x, uint16_t rect_center_y,
-                                   uint16_t rect_w, uint16_t rect_h);
-static void Draw_Target_Entity(uint16_t x, uint16_t y, TargetType type, uint8_t color);
-
 // ===== Game Function Implementations =====
-
-static uint16_t Random_U16(uint16_t max)
-{
-  uint32_t rnd = 0;
-  HAL_RNG_GenerateRandomNumber(&hrng, &rnd);
-  return (uint16_t)(rnd % max);
-}
 
 static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
 {
     GameDifficulty cfg;
 
-    if (selected_mode == SUBMENU_1_STATE_2)
+    if (selected_mode == SUBMENU_1_STATE_1)
+    {
+        cfg.mode_name = "Easy";
+        cfg.target_fall_speed = TARGET_FALL_SPEED;
+        cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
+        cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
+        cfg.boss_fire_interval_ms = 1200;
+        cfg.advanced_spawn_chance = 20;
+        cfg.boss_spawn_chance = 5;
+        cfg.heal_spawn_chance = 10;
+        cfg.spread_spawn_chance = 10;
+        cfg.win_score = EASY_WIN_SCORE;
+    }
+    else if (selected_mode == SUBMENU_1_STATE_2)
     {
         // Hard: faster enemies and slightly slower player shooting
         cfg.mode_name = "Hard";
@@ -179,7 +177,7 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.spread_spawn_chance = 8;
         cfg.win_score = HARD_WIN_SCORE;
     }
-    else if (selected_mode == SUBMENU_1_STATE_3)
+    else
     {
         cfg.mode_name = "Infinite";
         cfg.target_fall_speed = TARGET_FALL_SPEED;
@@ -191,19 +189,6 @@ static GameDifficulty Get_Difficulty_From_Mode(SubMenuState selected_mode)
         cfg.heal_spawn_chance = 5;
         cfg.spread_spawn_chance = 5;
         cfg.win_score = 0;
-    }
-    else
-    {
-        cfg.mode_name = "Easy";
-        cfg.target_fall_speed = TARGET_FALL_SPEED;
-        cfg.target_move_delay_ms = TARGET_MOVE_DELAY_MS;
-        cfg.bullet_fire_interval_ms = BULLET_FIRE_INTERVAL_MS;
-        cfg.boss_fire_interval_ms = 1200;
-        cfg.advanced_spawn_chance = 20;
-        cfg.boss_spawn_chance = 5;
-        cfg.heal_spawn_chance = 10;
-        cfg.spread_spawn_chance = 10;
-        cfg.win_score = EASY_WIN_SCORE;
     }
 
     return cfg;
@@ -269,36 +254,6 @@ static uint8_t Is_Target_Item(TargetType type)
     return (type == TARGET_TYPE_ITEM_HEAL || type == TARGET_TYPE_ITEM_SPREAD) ? 1 : 0;
 }
 
-static int32_t Max(int32_t a, int32_t b)
-{
-    return (a > b) ? a : b;
-}
-
-static int32_t Clamp(int32_t value, int32_t min_value, int32_t max_value)
-{
-    if (value < min_value) return min_value;
-    if (value > max_value) return max_value;
-    return value;
-}
-
-static uint8_t Circle_Rect_Overlap(uint16_t circle_x, uint16_t circle_y, uint16_t circle_r,
-                                   uint16_t rect_center_x, uint16_t rect_center_y,
-                                   uint16_t rect_w, uint16_t rect_h)
-{
-    int32_t half_w      = rect_w / 2;
-    int32_t half_h      = rect_h / 2;
-    int32_t rect_left   = (int32_t)rect_center_x - half_w;
-    int32_t rect_top    = (int32_t)rect_center_y - half_h;
-    int32_t rect_right  = (int32_t)rect_center_x + half_w;
-    int32_t rect_bottom = (int32_t)rect_center_y + half_h;
-
-    int32_t closest_x = Clamp((int32_t)circle_x, rect_left, rect_right);
-    int32_t closest_y = Clamp((int32_t)circle_y, rect_top, rect_bottom);
-
-    int32_t dx = (int32_t)circle_x - closest_x;
-    int32_t dy = (int32_t)circle_y - closest_y;
-    return ((dx * dx) + (dy * dy) <= (int32_t)(circle_r * circle_r)) ? 1 : 0;
-}
 
 static void Draw_Target_Entity(uint16_t x, uint16_t y, TargetType type, uint8_t color)
 {
@@ -314,31 +269,6 @@ static void Draw_Target_Entity(uint16_t x, uint16_t y, TargetType type, uint8_t 
     }
 }
 
-// Reference: Unit 3.2 Joystick
-
-/**
- * @brief Check if two circles overlap (for collision detection)
- * 
- * Two circles collide when the distance between their centers is less than
- * the sum of their radii. This function calculates the squared distance to
- * avoid expensive sqrt() operations - we compare squared distances instead.
- * 
- * @param x1, y1 Center coordinates of first circle
- * @param x2, y2 Center coordinates of second circle
- * @param r1, r2 Radii of the two circles
- * @return 1 if circles overlap, 0 otherwise
- */
-uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
-                        uint16_t x2, uint16_t y2, uint16_t r2)
-{
-  int32_t dx = (int32_t)x2 - (int32_t)x1;
-  int32_t dy = (int32_t)y2 - (int32_t)y1;
-  int32_t dist_squared = (dx * dx) + (dy * dy);
-  int32_t radii_sum = r1 + r2;
-  int32_t radii_sum_squared = radii_sum * radii_sum;
-  
-  return (dist_squared <= radii_sum_squared) ? 1 : 0;
-}
 
 /**
  * @brief Place a target at a random screen location that doesn't collide with player or other targets
@@ -360,7 +290,7 @@ uint8_t Circles_Overlap(uint16_t x1, uint16_t y1, uint16_t r1,
  * @param player_x Current player X position (to avoid spawning on player)
  * @param player_y Current player Y position
  */
-void Place_Target(uint8_t index,
+static void Place_Target(uint8_t index,
                   uint16_t *target_x,
                   uint16_t *target_y,
                   TargetType *target_type,
@@ -420,7 +350,6 @@ void Place_Target(uint8_t index,
 }
 
 
-
 MenuState Game1_Run(void) 
 {
     SubMenuSystem submenu;
@@ -429,8 +358,6 @@ MenuState Game1_Run(void)
 
     SubMenu_Init(&submenu);
 
-    // 外部循环：子菜单选择模式；游戏内BT3返回这里 
-    // 内部循环：运行实际游戏，直到BT3按下返回子菜单
     // Outer loop: submenu selects mode; gameplay BT3 returns here.
     // Inner loop: runs the actual game until BT3 is pressed to return to submenu.
     while (1) {
@@ -500,8 +427,8 @@ MenuState Game1_Run(void)
         LCD_printString(hud_str, HUD_OFFSET_X, HUD_OFFSET_Y, 1, 2);
 
         // Initialize button hold tracking for returning to submenu
-        uint32_t btn3_press_start_ms = 0;   // 按下开始时间
-        uint32_t btn3_hold_ms = 0;          // 已按住的时间
+        uint32_t btn3_press_start_ms = 0;   // Press start time
+        uint32_t btn3_hold_ms = 0;          // Hold time duration
         char btn_hold_str[64];
 
         LCD_Draw_Rect(0, LCD_HEIGHT - 20, LCD_WIDTH, 20, 0, 1);
@@ -517,7 +444,7 @@ MenuState Game1_Run(void)
             // Read input
             Input_Read();
 
-            // 按下瞬间 -> 记录起始时间
+            // Button press moment -> record start time
             if (current_input.btn3_pressed) btn3_press_start_ms = frame_start;
             if (btn3_press_start_ms != 0) 
             {
@@ -552,7 +479,7 @@ MenuState Game1_Run(void)
                         break;
                     }
                 }
-                else // 松手 -> 清零
+                else // Button released before hold threshold -> reset start time
                 {
                     btn3_press_start_ms = 0;
                     btn3_hold_ms = 0;
@@ -594,8 +521,6 @@ MenuState Game1_Run(void)
 
                 // Clamp position to screen boundaries (prevent player from leaving the display)
                 // Keep player radius away from edges so the full circle stays visible
-                // 将位置限制在屏幕边界内（防止玩家离开屏幕）
-                // 保持玩家半径远离边缘，以便整个圆圈始终可见
                 if (new_x < PLAYER_RADIUS) new_x = PLAYER_RADIUS;
                 if (new_x >= (LCD_WIDTH - PLAYER_RADIUS)) new_x = LCD_WIDTH - PLAYER_RADIUS - 1;
                 if (new_y < (PLAY_AREA_Y0 + PLAYER_RADIUS)) new_y = PLAY_AREA_Y0 + PLAYER_RADIUS;
@@ -610,13 +535,10 @@ MenuState Game1_Run(void)
 
             // ===== STEP 3: Render Player Movement =====
             // Only redraw if player actually moved (avoids unnecessary LCD operations)
-            // 仅当玩家实际移动时才重新绘制（避免不必要的 LCD 操作）
             if (player_x != prev_player_x || player_y != prev_player_y)
             {
                 // Erase player at old position (draw circle in background color)
-                // Draw player at new position (draw circle in player color)
-                // 擦除玩家上一帧的图像（以背景色绘制圆圈）
-                // 在新位置绘制玩家（用玩家颜色绘制圆圈）                
+                // Draw player at new position (draw circle in player color)           
                 LCD_Draw_Circle(prev_player_x, prev_player_y, PLAYER_RADIUS, 0, 1);
                 LCD_Draw_Circle(player_x, player_y, PLAYER_RADIUS, PLAYER_COLOR, 1);
 
@@ -754,9 +676,7 @@ MenuState Game1_Run(void)
 
             // ===== STEP -2: Collision Detection =====
             // Circle overlap collision: check if circles touch or overlap
-            // Two circles collide when distance between centers < sum of radii
-            // 圆重叠碰撞检测：检查圆是否接触或重叠
-            // 当两个圆心之间的距离小于半径之和时，这两个圆会发生碰撞。            
+            // Two circles collide when distance between centers < sum of radii        
             for (uint8_t i = 0; i < TARGET_COUNT; i++)
             {
                 uint8_t target_radius = Get_Target_Radius(target_type[i]);
@@ -849,46 +769,6 @@ MenuState Game1_Run(void)
             // ===== STEP -1: Update Display =====
             // Transfer the frame buffer to the LCD hardware (makes all draws visible)
             LCD_Refresh(&cfg0);
-
-            // // UPDATE: Game logic
-            // animation_counter++;
-
-            // // Simple animation: move object back and forth
-            // moving_x += move_direction * move_step;
-            // if (moving_x >= 200 || moving_x <= 0) {
-            //     move_direction *= -1;
-            // }
-
-            // Example: Vary LED brightness based on animation
-            // uint8_t brightness = (moving_x * 100) / 200;
-            // PWM_SetDuty(&pwm_cfg, brightness);
-
-            // // RENDER: Draw to LCD
-            // LCD_Fill_Buffer(0);
-
-            // // Title
-            // LCD_printString("GAME 1", 60, 10, 1, 3);
-            // LCD_printString((char*)mode_options[selected_mode - SUBMENU_1_STATE_1], 60, 45, 1, 2);
-
-            // // Simple animated object (moving box)
-            // LCD_printString("[*]", 20 + moving_x, 100, 1, 3);
-
-            // // Display counter
-            // char counter[32];
-            // sprintf(counter, "Frame: %lu", animation_counter);
-            // LCD_printString(counter, 50, 150, 1, 2);
-
-            // // Show PWM LED usage
-            // LCD_printString("LED: PWM Demo", 30, 180, 1, 1);
-            // char pwm_str[32];
-            // sprintf(pwm_str, "Brightness: %d%%", brightness);
-            // LCD_printString(pwm_str, 30, 195, 1, 1);
-
-            // // Instructions
-            // LCD_printString("Press BT3 to", 40, 210, 1, 1);
-            // LCD_printString("Back to Mode Menu", 20, 225, 1, 1);
-
-            // LCD_Refresh(&cfg0);
 
             // Frame timing - wait for remainder of frame time
             uint32_t frame_time = HAL_GetTick() - frame_start;

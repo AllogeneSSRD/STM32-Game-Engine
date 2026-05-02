@@ -106,7 +106,7 @@ void Draw_Player(void)
     switch (pacman_dir) //The four directions correspond to four different mouth orientations
     {
         case DIR_LEFT:  LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_left);  break; 
-        case DIR_UP:    LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_right);    break;
+        case DIR_UP:    LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_right); break;
         case DIR_DOWN:  LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_left);  break;
         case DIR_RIGHT: LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_right); break;
         default: LCD_Draw_Sprite(px, py, SPR_SIZE, SPR_SIZE, pacman_right); break;

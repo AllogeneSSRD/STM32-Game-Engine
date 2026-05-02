@@ -301,13 +301,10 @@ static void Draw_Player(void)
     }
 }
 
-
-
 static void Draw_Reward(void)
 {
     LCD_printString("*", reward.x, reward.y, 5, 2);
 }
-
 
 static void Draw_PowerUp(void)
 {
@@ -316,8 +313,6 @@ static void Draw_PowerUp(void)
     else
         LCD_printString("#", powerup.x, powerup.y, 4, 2); 
 }
-
-
 
 void Draw_Enemies(void)
 {
@@ -338,8 +333,6 @@ void Draw_Enemies(void)
         LCD_Draw_Sprite(cx, cy, CAR_W, CAR_H, sprite);
     }
 }
-
-
 
 static void Initialize_Player_Center(void)
 {
@@ -414,7 +407,6 @@ static void Enemy_Init(void)
     }
 }
 
-
 static void PowerUp_Init(void)
 {
     powerup.x = lane_x[Random_Car()];
@@ -422,14 +414,11 @@ static void PowerUp_Init(void)
     powerup.type = Random_Car() % 2;
 }
 
-
 static void Reward_Init(void)
 {
     reward.x = lane_x[Random_Car()];
     reward.y = ROAD_TOP;
 }
-
-
 
 static void Reward_Update(void)
 {
@@ -570,7 +559,8 @@ MenuState Game2_Run(void) {
                     HAL_Delay(23);  // Brief beep duration
                     buzzer_off(&buzzer_cfg);  // Stop the buzzer
 
-                    if (btn3_hold_ms >= 2000) {
+                    if (btn3_hold_ms >= 2000) 
+                    {
                         btn3_exit = 1;
                         break;
                     }
@@ -602,28 +592,28 @@ MenuState Game2_Run(void) {
             }
 
 
-    for (int i = 0; i < enemy_count; i++)
-    {
-        enemies[i].speed = enemies[i].base_speed;
-
-        for (int j = 0; j < enemy_count; j++)
-        {
-            if (i != j) 
+            for (int i = 0; i < enemy_count; i++)
             {
-                if (enemies[i].x == enemies[j].x && enemies[j].y > enemies[i].y)
+                enemies[i].speed = enemies[i].base_speed;
+
+                for (int j = 0; j < enemy_count; j++)
                 {
-                    int distance = enemies[j].y - enemies[i].y;
-                    if (distance < FOLLOW_DISTANCE)
+                    if (i != j) 
                     {
-                        if (enemies[i].speed > enemies[j].speed)
+                        if (enemies[i].x == enemies[j].x && enemies[j].y > enemies[i].y)
                         {
-                            enemies[i].speed = enemies[j].speed;
+                            int distance = enemies[j].y - enemies[i].y;
+                            if (distance < FOLLOW_DISTANCE)
+                            {
+                                if (enemies[i].speed > enemies[j].speed)
+                                {
+                                    enemies[i].speed = enemies[j].speed;
+                                }
+                            }   
                         }
-                    }   
+                    }
                 }
             }
-        }
-    }
 
 
 
@@ -683,23 +673,24 @@ MenuState Game2_Run(void) {
 
 
             
-// Player collects power-up
-if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS,
-                    powerup.x, powerup.y, 4))
-{
-    if (powerup.type == POWER_HEAL)
-    {
-        if (remaining_lives < 3)
-            remaining_lives++;   
-    }
-    else if (powerup.type == POWER_INVINC)
-    {
-        invincible = 1;
-        invincible_start_ms = HAL_GetTick();  
-    }
+            // Player collects power-up
+            if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS,powerup.x, powerup.y, 4))
+            {
+                if (powerup.type == POWER_HEAL)
+                {
+                    if (remaining_lives < 3)
+                    {
+                        remaining_lives++;
+                    }
+                }
+                else if (powerup.type == POWER_INVINC)
+                {
+                    invincible = 1;
+                    invincible_start_ms = HAL_GetTick();  
+                }
 
-    PowerUp_Init();   
-}
+                PowerUp_Init();   
+            }
 
             if (score >= WIN_SCORE)
             {
@@ -709,13 +700,13 @@ if (Circles_Overlap(player_x, player_y, PLAYER_RADIUS,
             }
 
 
-if (invincible)
-{
-    if (HAL_GetTick() - invincible_start_ms >= INVINCIBLE_TIME_MS)
-    {
-        invincible = 0;  
-    }
-}
+            if (invincible)
+            {
+                if (HAL_GetTick() - invincible_start_ms >= INVINCIBLE_TIME_MS)
+                {
+                    invincible = 0;  
+                }
+            }
 
 
             //Game over
@@ -753,54 +744,58 @@ if (invincible)
         
         // Frame timing - wait for remainder of frame time
         uint32_t frame_time = HAL_GetTick() - frame_start;
-        if (frame_time < GAME2_FRAME_TIME_MS) {
+        if (frame_time < GAME2_FRAME_TIME_MS) 
+        {
             HAL_Delay(GAME2_FRAME_TIME_MS - frame_time);
         }
-    }
+        }
   
-     if (win || remaining_lives == 0)
+        if (win || remaining_lives == 0)
+        {
             break;
+        }
+            
     }
      
            
-// Victory celebration
-if (win)
-{
-    for (int i = 0; i < 6; i++)
+    // Victory celebration
+    if (win)
     {
-        LCD_Fill_Buffer(0);
-        LCD_printString("YOU WIN!", 50, 100, 2, 3);
-        LCD_printString("SCORE 100+", 40, 140, 1, 2);
-        LCD_Refresh(&cfg0);
+        for (int i = 0; i < 6; i++)
+        {
+            LCD_Fill_Buffer(0);
+            LCD_printString("YOU WIN!", 50, 100, 2, 3);
+            LCD_printString("SCORE 100+", 40, 140, 1, 2);
+            LCD_Refresh(&cfg0);
 
-        buzzer_tone(&buzzer_cfg, 1500, 40);
-        HAL_Delay(200);
-        buzzer_off(&buzzer_cfg);
+            buzzer_tone(&buzzer_cfg, 1500, 40);
+            HAL_Delay(200);
+            buzzer_off(&buzzer_cfg);
 
-        HAL_Delay(200);
+            HAL_Delay(200);
+        }
     }
-}
 
     //Game over
     // Play game over sounds and lights
     if (!win)
-{
-    buzzer_note(&buzzer_cfg, NOTE_A4, 60);
-    HAL_Delay(1000);
-    buzzer_off(&buzzer_cfg);
-
-    for (int i = 0; i < 4; i++)
     {
-        LCD_Fill_Buffer(0);
-        LCD_printString("GAME OVER!!!", 40, 120, 1, 3);
-        LCD_Refresh(&cfg0);
-        HAL_Delay(300);
+        buzzer_note(&buzzer_cfg, NOTE_A4, 60);
+        HAL_Delay(1000);
+        buzzer_off(&buzzer_cfg);
 
-        LCD_Fill_Buffer(0);
-        LCD_Refresh(&cfg0);
-        HAL_Delay(300);
+        for (int i = 0; i < 4; i++)
+        {
+            LCD_Fill_Buffer(0);
+            LCD_printString("GAME OVER!!!", 40, 120, 1, 3);
+            LCD_Refresh(&cfg0);
+            HAL_Delay(300);
+
+            LCD_Fill_Buffer(0);
+            LCD_Refresh(&cfg0);
+            HAL_Delay(300);
+        }
     }
-}
 
     LCD_Fill_Buffer(0);
     LCD_printString("BACK TO MENU...", 40, 120, 1, 2);

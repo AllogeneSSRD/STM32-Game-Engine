@@ -51,8 +51,8 @@ static int road_offset = 0;
 #define WIN_SCORE 100
 #define FOLLOW_DISTANCE  60   // Follow the car deceleration distance
 #define BTN3_HOLD_EXIT_MS   3000
-#define POWER_HEAL     0   // 回血
-#define POWER_INVINC  1   // 无敌
+#define POWER_HEAL    0   
+#define POWER_INVINC  1   
 #define INVINCIBLE_TIME_MS 3000
 #define BLINK_INTERVAL_MS 200  
 #define CAR_H 11 

@@ -388,8 +388,8 @@ MenuState Game1_Run(void)
         // Initial targets
         uint16_t target_x[TARGET_COUNT] = {0};
         uint16_t target_y[TARGET_COUNT] = {0};
-        TargetType target_type[TARGET_COUNT] = {TARGET_TYPE_NORMAL};
         int16_t target_hp[TARGET_COUNT] = {0};
+        TargetType target_type[TARGET_COUNT] = {TARGET_TYPE_NORMAL};
         uint32_t target_last_fire_tick[TARGET_COUNT] = {0};
         uint32_t last_target_move_tick = HAL_GetTick();
         for (uint8_t i = 0; i < TARGET_COUNT; i++)
